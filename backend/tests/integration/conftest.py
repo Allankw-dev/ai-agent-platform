@@ -78,3 +78,20 @@ def runtime_role_exists(engine: Engine) -> bool:
         return bool(
             conn.execute(text("SELECT 1 FROM pg_roles WHERE rolname = 'agent_app'")).scalar()
         )
+
+
+@pytest.fixture
+def runtime_url(migrated_url: str) -> str:
+    """URL for the non-superuser runtime role (agent_app), the role the API really uses.
+
+    Row Level Security does not apply to superusers, so isolation must be tested as this role.
+    """
+    owner = create_engine(migrated_url)
+    try:
+        exists = runtime_role_exists(owner)
+    finally:
+        owner.dispose()
+    if not exists:
+        _require_or_skip("runtime role agent_app is missing (see docker/postgres-init.sql)")
+    url = make_url(migrated_url).set(username="agent_app", password="agent_app")
+    return url.render_as_string(hide_password=False)

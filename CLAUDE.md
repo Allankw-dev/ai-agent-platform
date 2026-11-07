@@ -34,12 +34,15 @@ Frontend (in `frontend/`, Node 22, Next.js 16 with Cache Components enabled):
 - No logic in `main.py`. Routers -> services -> repositories.
 - Never trust model-generated tool arguments; validate against the tool schema.
 - No secrets in code. Config via environment only. Never commit `.env`.
+- Tenant data is only touched through a session that called `use_tenant(...)` (see
+  `docs/tenancy.md`). Never connect as the owner/superuser for request handling.
 - Every tenant table has `org_id`. Every change to a model needs a migration (CI enforces it).
 - No decorative UI: every control must work.
 - Commit at logical milestones with clear messages.
 
 ## Phase status
 - [x] Phase 1: Foundation (monorepo, API, worker, Docker, models, Alembic, CI, frontend shell)
-- [ ] Phase 2: Identity and tenancy (Supabase Auth, orgs, roles, RLS, login/register pages)
+- [ ] Phase 2: Identity and tenancy: [x] 2A token verification, [x] 2B row level security,
+      [ ] 2C organizations/roles/invitations, [ ] 2D login/register pages
 - [ ] Phase 3: Agents and engine
 - [ ] Phase 4: Tools and approvals (MVP)

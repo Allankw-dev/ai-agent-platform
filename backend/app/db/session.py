@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+import app.db.tenancy  # noqa: F401  (registers the Row Level Security context listener)
 from app.core.config import get_settings
 
 

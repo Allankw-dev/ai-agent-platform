@@ -25,10 +25,10 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
-    # Supabase (Phase 2)
+    # Supabase Auth. The API only needs the project URL: tokens are verified against the
+    # project's public keys (JWKS), so no secret is required here.
     supabase_url: str | None = None
-    supabase_anon_key: SecretStr | None = None
-    supabase_jwt_secret: SecretStr | None = None
+    supabase_jwt_audience: str = "authenticated"
 
     # Anthropic (Phase 3)
     anthropic_api_key: SecretStr | None = None

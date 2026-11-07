@@ -3,10 +3,18 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
+from app.core.errors import (
+    ApiError,
+    api_error_handler,
+    http_exception_handler,
+    validation_error_handler,
+)
 from app.core.logging import configure_logging
 from app.db.session import get_engine
 
@@ -41,6 +49,10 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
     )
+
+    app.add_exception_handler(ApiError, api_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(StarletteHTTPException, http_exception_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(RequestValidationError, validation_error_handler)  # type: ignore[arg-type]
 
     app.include_router(api_router, prefix="/api/v1")
     return app
