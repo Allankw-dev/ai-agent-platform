@@ -1,0 +1,54 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+/* Design tokens: deep navy surfaces, violet primary, cyan highlights. Dark theme only. */
+:root {
+  --background: #0a0f1f;
+  --foreground: #e7eaf4;
+  --card: #0f1630;
+  --card-foreground: #e7eaf4;
+  --muted: #151d3a;
+  --muted-foreground: #98a3c2;
+  --border: #212b4d;
+  --primary: #7c5cff;
+  --primary-foreground: #ffffff;
+  --accent: #22d3ee;
+  --ring: #22d3ee;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --radius: 0.75rem;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --radius-lg: var(--radius);
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

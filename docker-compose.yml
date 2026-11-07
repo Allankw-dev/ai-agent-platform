@@ -72,5 +72,20 @@ services:
       redis:
         condition: service_healthy
 
+  frontend:
+    build: ./frontend
+    environment:
+      # Read by the browser, so it must be a URL the browser can reach (not the Docker hostname).
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - api
+
 volumes:
   pgdata:
