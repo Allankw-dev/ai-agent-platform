@@ -13,6 +13,7 @@ dependencies = [
     "redis>=5.2",
     "celery[redis]>=5.4",
     "structlog>=24.4",
+    "alembic>=1.14",
 ]
 
 [dependency-groups]

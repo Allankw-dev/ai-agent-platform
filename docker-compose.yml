@@ -41,6 +41,8 @@ services:
     volumes:
       - ./backend/app:/app/app
       - ./backend/tests:/app/tests
+      - ./backend/alembic:/app/alembic
+      - ./backend/alembic.ini:/app/alembic.ini
     depends_on:
       db:
         condition: service_healthy
