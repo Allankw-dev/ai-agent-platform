@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (lint, types, migrations, tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: agentplatform
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d agentplatform"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql+psycopg://agent_app:agent_app@localhost:5432/agentplatform
+      MIGRATION_DATABASE_URL: postgresql+psycopg://app:app@localhost:5432/agentplatform
+      REDIS_URL: redis://localhost:6379/0
+      # Database tests must run in CI; a missing database is a failure, not a skip.
+      REQUIRE_DB: "1"
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv and dependencies
+        run: |
+          pip install uv
+          uv sync --frozen
+
+      - name: Create database roles (same script as local Docker)
+        working-directory: .
+        env:
+          PGPASSWORD: app
+        run: psql -h localhost -U app -d agentplatform -v ON_ERROR_STOP=1 -f infrastructure/docker/postgres-init.sql
+
+      - name: Lint (ruff)
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Type check (mypy)
+        run: uv run mypy app tests
+
+      - name: Migrations (up, down, up) and model drift check
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+          uv run alembic check
+
+      - name: Tests
+        run: uv run pytest -q
+
+  docker:
+    name: Docker (build image, validate compose)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate docker-compose.yml
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+
+      - name: Build backend image
+        run: docker build ./backend

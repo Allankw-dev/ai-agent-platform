@@ -3,7 +3,9 @@ import pytest
 from app.core.config import Settings
 
 
-def test_defaults_are_development() -> None:
+def test_defaults_are_development(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("APP_ENV", "LOG_LEVEL", "REDIS_URL"):
+        monkeypatch.delenv(name, raising=False)
     settings = Settings(_env_file=None)
     assert settings.app_env == "development"
     assert settings.is_production is False
