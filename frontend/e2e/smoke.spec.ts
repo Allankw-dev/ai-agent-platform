@@ -49,3 +49,10 @@ test("check again button re-queries the API", async ({ page }) => {
   await page.getByRole("button", { name: "Check again" }).click();
   await expect.poll(() => calls).toBeGreaterThan(before);
 });
+
+test("landing page calls to action lead to account creation", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "Get started" }).first().click();
+  await expect(page).toHaveURL(/\/register$/);
+  await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
+});

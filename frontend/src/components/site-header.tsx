@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { HeaderAuthLinks } from "@/components/header-auth-links";
+
 const links = [
   { href: "/#features", label: "Features" },
   { href: "/#how-it-works", label: "How it works" },
@@ -20,17 +22,20 @@ export function SiteHeader() {
           </span>
           Agent Platform
         </Link>
-        <nav aria-label="Main" className="flex items-center gap-1 text-sm">
-          {links.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="rounded-md px-3 py-2 text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
+        <div className="flex items-center gap-2">
+          <nav aria-label="Main" className="hidden items-center gap-1 text-sm md:flex">
+            {links.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="rounded-md px-3 py-2 text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+          <HeaderAuthLinks />
+        </div>
       </div>
     </header>
   );

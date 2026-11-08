@@ -28,6 +28,10 @@ Backend (in `backend/`, Python 3.12 pinned, managed by uv):
 Frontend (in `frontend/`, Node 22, Next.js 16 with Cache Components enabled):
 - `npm run dev | lint | typecheck | format:check | test | build | test:e2e`
 - The browser calls the API at `NEXT_PUBLIC_API_URL` (default http://localhost:8000).
+- Sign-in uses Supabase from the browser (`NEXT_PUBLIC_SUPABASE_URL` and the publishable key);
+  see `docs/auth.md`. Pages under `src/app/(app)` require sign-in; `(marketing)` and `(auth)` do not.
+- Components that read the URL (`useSearchParams`, `usePathname`) need a `<Suspense>` boundary
+  (Cache Components); `next build` fails otherwise.
 
 ## Conventions
 - Python 3.12, Ruff, strict mypy, pytest. TypeScript strict, ESLint, Prettier, Vitest, Playwright.
@@ -42,7 +46,7 @@ Frontend (in `frontend/`, Node 22, Next.js 16 with Cache Components enabled):
 
 ## Phase status
 - [x] Phase 1: Foundation (monorepo, API, worker, Docker, models, Alembic, CI, frontend shell)
-- [ ] Phase 2: Identity and tenancy: [x] 2A token verification, [x] 2B row level security,
-      [x] 2C organizations/roles/invitations, [ ] 2D login/register pages
+- [x] Phase 2: Identity and tenancy: [x] 2A token verification, [x] 2B row level security,
+      [x] 2C organizations/roles/invitations, [x] 2D login/register pages and app shell
 - [ ] Phase 3: Agents and engine
 - [ ] Phase 4: Tools and approvals (MVP)

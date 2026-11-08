@@ -77,6 +77,9 @@ services:
     environment:
       # Read by the browser, so it must be a URL the browser can reach (not the Docker hostname).
       NEXT_PUBLIC_API_URL: http://localhost:8000
+      # From your .env (Compose reads it automatically). Both are safe to expose to the browser.
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
       WATCHPACK_POLLING: "true"
     ports:
       - "3000:3000"
