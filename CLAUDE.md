@@ -43,6 +43,6 @@ Frontend (in `frontend/`, Node 22, Next.js 16 with Cache Components enabled):
 ## Phase status
 - [x] Phase 1: Foundation (monorepo, API, worker, Docker, models, Alembic, CI, frontend shell)
 - [ ] Phase 2: Identity and tenancy: [x] 2A token verification, [x] 2B row level security,
-      [ ] 2C organizations/roles/invitations, [ ] 2D login/register pages
+      [x] 2C organizations/roles/invitations, [ ] 2D login/register pages
 - [ ] Phase 3: Agents and engine
 - [ ] Phase 4: Tools and approvals (MVP)

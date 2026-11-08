@@ -36,13 +36,20 @@ def world(engine: Engine, runtime_url: str) -> Iterator[World]:
 
 @contextmanager
 def acting_as(
-    world: World, *, user: uuid.UUID | None = None, org: uuid.UUID | None = None
+    world: World,
+    *,
+    user: uuid.UUID | None = None,
+    org: uuid.UUID | None = None,
+    invite_hash: str | None = None,
 ) -> Iterator[Connection]:
     """A runtime-role transaction with the tenant context set, like one API request."""
     with world.runtime.begin() as conn:
         conn.execute(
-            text("SELECT set_config('app.user_id', :u, true), set_config('app.org_id', :o, true)"),
-            {"u": str(user) if user else "", "o": str(org) if org else ""},
+            text(
+                "SELECT set_config('app.user_id', :u, true), set_config('app.org_id', :o, true), "
+                "set_config('app.invite_hash', :h, true)"
+            ),
+            {"u": str(user) if user else "", "o": str(org) if org else "", "h": invite_hash or ""},
         )
         yield conn
 
@@ -294,3 +301,41 @@ def test_context_does_not_leak_into_the_next_transaction(world: World) -> None:
             assert _scalar(conn, "SELECT count(*) FROM agents") == 1
         with conn.begin():
             assert _scalar(conn, "SELECT count(*) FROM agents") == 0
+
+
+# ---------- invitations ----------
+
+
+def test_invite_token_reveals_exactly_one_invitation(world: World) -> None:
+    """Holding a token lets you see that invitation, even from outside the organization."""
+    with acting_as(world, invite_hash=world.a.invite_hash) as conn:
+        assert _scalar(conn, "SELECT count(*) FROM organization_invitations") == 1
+        assert (
+            _scalar(
+                conn,
+                "SELECT count(*) FROM organization_invitations WHERE org_id = :o",
+                o=world.b.org,
+            )
+            == 0
+        )
+
+
+def test_wrong_token_reveals_nothing(world: World) -> None:
+    with acting_as(world, invite_hash="0" * 64) as conn:
+        assert _scalar(conn, "SELECT count(*) FROM organization_invitations") == 0
+
+
+def test_invite_token_does_not_unlock_other_tables(world: World) -> None:
+    with acting_as(world, invite_hash=world.a.invite_hash) as conn:
+        for table in ("agents", "organization_members", "agent_runs", "credentials"):
+            assert _scalar(conn, f"SELECT count(*) FROM {table}") == 0, table
+
+
+def test_invite_token_does_not_allow_writing_to_the_organization(world: World) -> None:
+    with pytest.raises(ProgrammingError), acting_as(world, invite_hash=world.a.invite_hash) as conn:
+        conn.execute(
+            text(
+                "INSERT INTO organization_members (org_id, user_id, role) VALUES (:o, :u, 'member')"
+            ),
+            {"o": world.a.org, "u": world.b.user},
+        )

@@ -8,6 +8,7 @@ composite key `(parent_id, org_id)`, so a row can never point at another organiz
 erDiagram
     users ||--o{ organization_members : "joins"
     organizations ||--o{ organization_members : "has"
+    organizations ||--o{ organization_invitations : "invites"
     organizations ||--o{ agents : "owns"
     agents ||--o{ agent_versions : "has versions"
     agents ||--o| agent_versions : "current_version"
@@ -30,6 +31,7 @@ erDiagram
     users { uuid id PK; string email UK; bool is_super_admin }
     organizations { uuid id PK; string name; string slug UK }
     organization_members { uuid id PK; uuid org_id FK; uuid user_id FK; string role }
+    organization_invitations { uuid id PK; uuid org_id FK; string email; string role; string token_hash UK; timestamp expires_at; timestamp accepted_at; timestamp revoked_at }
     agents { uuid id PK; uuid org_id FK; string name; string status; uuid current_version_id FK; timestamp deleted_at }
     agent_versions { uuid id PK; uuid agent_id FK; int version; text system_instructions; string model; jsonb limits }
     tools { uuid id PK; string key UK; jsonb input_schema; bool is_sensitive }
@@ -45,5 +47,5 @@ erDiagram
     audit_logs { uuid id PK; uuid org_id FK; uuid actor_user_id FK; string action }
 ```
 
-Later phases add: `organization_invitations`, `workflows`, `workflow_versions`, `triggers`,
+Later phases add: `workflows`, `workflow_versions`, `triggers`,
 `scheduled_jobs`, `knowledge_bases`, `documents`, `document_chunks`, `subscriptions`.

@@ -25,6 +25,10 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # Used to build invitation links, and how long an invitation stays valid.
+    frontend_url: str = "http://localhost:3000"
+    invitation_ttl_days: int = 7
+
     # Supabase Auth. The API only needs the project URL: tokens are verified against the
     # project's public keys (JWKS), so no secret is required here.
     supabase_url: str | None = None
