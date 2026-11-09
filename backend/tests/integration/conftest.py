@@ -107,7 +107,7 @@ async def api(runtime_url: str, engine: Engine) -> AsyncIterator["Api"]:
     from httpx import ASGITransport, AsyncClient
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-    from app.api.deps import get_token_verifier
+    from app.api.deps import get_auth_server, get_token_verifier
     from app.core.security import TokenVerifier
     from app.db.session import get_session
     from app.main import app
@@ -127,6 +127,8 @@ async def api(runtime_url: str, engine: Engine) -> AsyncIterator["Api"]:
         StaticKeys(key), issuer=ISSUER, audience=AUDIENCE
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        yield Api(client, key, engine)
+        api_driver = Api(client, key, engine)
+        app.dependency_overrides[get_auth_server] = lambda: api_driver.auth_server
+        yield api_driver
     app.dependency_overrides.clear()
     await runtime_engine.dispose()

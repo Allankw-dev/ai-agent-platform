@@ -2,7 +2,8 @@
 
 Every tenant table also has `org_id -> organizations.id`. Child tables reference parents with a
 composite key `(parent_id, org_id)`, so a row can never point at another organization's data.
-`tools` is a global catalog (no `org_id`). `audit_logs` is append-only for the runtime role.
+`tools` is a global catalog (no `org_id`). `audit_logs` is append-only for the runtime role; its
+`org_id` is a plain id, not a foreign key, so the history survives deleting the organization.
 
 ```mermaid
 erDiagram
@@ -25,7 +26,6 @@ erDiagram
     conversations ||--o{ messages : "contains"
     agent_runs ||--o{ messages : "produces"
     agent_runs ||--o{ usage_records : "costs"
-    organizations ||--o{ audit_logs : "audited"
     users ||--o{ audit_logs : "acts"
 
     users { uuid id PK; string email UK; bool is_super_admin }

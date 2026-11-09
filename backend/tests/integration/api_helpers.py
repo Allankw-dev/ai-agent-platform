@@ -2,10 +2,35 @@ import uuid
 from typing import Any
 
 import httpx
+import jwt
 from cryptography.hazmat.primitives.asymmetric import ec
 from sqlalchemy import Engine, text
 
+from app.core.auth_server import AuthServerUser
+from app.core.errors import ApiError
 from tests.auth_helpers import make_token
+
+
+class FakeAuthServer:
+    """Stands in for Supabase's Auth server. Every email is confirmed unless a test says otherwise."""
+
+    def __init__(self) -> None:
+        self.unconfirmed: set[str] = set()
+        self.reports_other_email: dict[str, str] = {}
+        self.down = False
+        self.calls = 0
+
+    async def get_user(self, access_token: str) -> AuthServerUser:
+        self.calls += 1
+        if self.down:
+            raise ApiError(503, "auth_unavailable", "Authentication is temporarily unavailable.")
+        claims = jwt.decode(access_token, options={"verify_signature": False})
+        email = str(claims["email"]).lower()
+        return AuthServerUser(
+            id=uuid.UUID(claims["sub"]),
+            email=self.reports_other_email.get(email, email),
+            email_confirmed=email not in self.unconfirmed,
+        )
 
 
 class Api:
@@ -17,6 +42,7 @@ class Api:
         self.client = client
         self.key = key
         self.owner = owner
+        self.auth_server = FakeAuthServer()
 
     @staticmethod
     def user_id(email: str) -> uuid.UUID:

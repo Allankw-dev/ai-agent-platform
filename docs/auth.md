@@ -31,6 +31,23 @@ which prevents open redirects.
 - Supabase's built-in email sender is rate limited and meant for development. Configure your own
   SMTP provider before real users sign up.
 
+## Email confirmation and invitations
+
+An invitation is bound to an email address, so accepting one trusts "this person owns this
+address". The access token's `email` claim does not prove that (it only says which address the
+account was created with; Supabase puts no confirmation flag in the token). So
+`POST /invitations/accept` also asks Supabase's Auth server for the user (`GET /auth/v1/user`,
+using the user's own token and the publishable key) and requires `email_confirmed_at` to be set
+and the account to match the token. It fails closed: if the Auth server cannot be reached the
+answer is 503, never "allowed".
+
+This keeps invitations safe even if email confirmation is ever switched off in the Supabase
+project. Any new feature that grants access based on someone's email must use the
+`ConfirmedUser` dependency (`app/api/deps.py`) rather than `CurrentUser`.
+
+The API reads the publishable key from `SUPABASE_PUBLISHABLE_KEY` or, if that is unset, the same
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` the frontend uses, so no extra setting is needed.
+
 ## Trade-offs to know
 
 - Tokens are held by supabase-js in the browser's storage, so a cross-site scripting bug could

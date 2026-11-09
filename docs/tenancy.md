@@ -30,7 +30,7 @@ it. In practice that is `get_org_context` in `app/api/deps.py` (membership check
 | organizations | the current org, plus any you belong to | insert only as yourself (`created_by_id`); update/delete current org |
 | users | yourself, plus members of the current org | insert/update yourself only; never delete |
 | organization_invitations | current org's rows, or the one row whose token hash equals `app.invite_hash` | current org only |
-| audit_logs | current org | insert only, for the current org or with no org; no update or delete |
+| audit_logs | current org | insert only, for the current org or with no org; no update or delete. `org_id` is deliberately not a foreign key, so entries outlive a deleted organization and keep pointing at it. Nobody can read them through the app afterwards (no one belongs to a deleted organization); they remain for operators and the future super-admin dashboard. |
 | tools | everyone (global catalog) | owner role only (migrations) |
 
 Accepting an invitation: a person is not yet a member, so they cannot see the organization. The API

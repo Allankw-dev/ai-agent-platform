@@ -10,6 +10,7 @@ from app.core.errors import ApiError
 from app.db.tenancy import use_tenant
 from app.models.enums import OrgRole
 from app.models.identity import Organization, OrganizationMember, User
+from app.repositories import members as member_repo
 from app.repositories import organizations as org_repo
 from app.services import audit
 
@@ -84,6 +85,10 @@ async def rename_organization(session: AsyncSession, ctx: OrgContext, name: str)
 
 
 async def delete_organization(session: AsyncSession, ctx: OrgContext) -> None:
+    organization = await org_repo.get(session, ctx.org_id)
+    if organization is None:  # pragma: no cover - membership was just verified
+        raise ApiError(404, "organization_not_found", "Organization not found.")
+    # The organization will be gone afterwards, so the entry records what it was.
     await audit.record(
         session,
         org_id=ctx.org_id,
@@ -91,6 +96,11 @@ async def delete_organization(session: AsyncSession, ctx: OrgContext) -> None:
         action="organization.deleted",
         resource_type="organization",
         resource_id=ctx.org_id,
+        details={
+            "name": organization.name,
+            "slug": organization.slug,
+            "member_count": await member_repo.count_members(session, ctx.org_id),
+        },
     )
     await org_repo.delete_by_id(session, ctx.org_id)
     await session.commit()

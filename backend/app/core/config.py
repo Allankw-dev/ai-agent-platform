@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +12,7 @@ class Settings(BaseSettings):
         env_file=("../.env", ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
     app_env: Literal["development", "test", "production"] = "development"
@@ -33,6 +34,15 @@ class Settings(BaseSettings):
     # project's public keys (JWKS), so no secret is required here.
     supabase_url: str | None = None
     supabase_jwt_audience: str = "authenticated"
+    # The publishable key is public by design (it ships in the browser). The API uses it only to
+    # ask Supabase's Auth server whether a user's email is confirmed. The same value as the
+    # frontend's NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, so no second variable is needed.
+    supabase_publishable_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
+        ),
+    )
 
     # Anthropic (Phase 3)
     anthropic_api_key: SecretStr | None = None

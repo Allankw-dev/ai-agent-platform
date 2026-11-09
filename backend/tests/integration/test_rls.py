@@ -339,3 +339,16 @@ def test_invite_token_does_not_allow_writing_to_the_organization(world: World) -
             ),
             {"o": world.a.org, "u": world.b.user},
         )
+
+
+def test_audit_entries_outlive_their_organization(world: World) -> None:
+    """Deleting an organization must not detach its history from it."""
+    with world.owner.begin() as conn:
+        conn.execute(text("DELETE FROM organizations WHERE id = :o"), {"o": world.a.org})
+        kept = _scalar(conn, "SELECT count(*) FROM audit_logs WHERE org_id = :o", o=world.a.org)
+    assert kept == 1
+    # Nobody acting within another organization can read them.
+    with acting_as(world, org=world.b.org) as conn:
+        assert (
+            _scalar(conn, "SELECT count(*) FROM audit_logs WHERE org_id = :o", o=world.a.org) == 0
+        )

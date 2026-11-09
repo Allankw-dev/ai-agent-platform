@@ -41,6 +41,9 @@ Frontend (in `frontend/`, Node 22, Next.js 16 with Cache Components enabled):
 - Tenant data is only touched through a session that called `use_tenant(...)` (see
   `docs/tenancy.md`). Never connect as the owner/superuser for request handling.
 - Every tenant table has `org_id`. Every change to a model needs a migration (CI enforces it).
+- Anything that grants access because of someone's email address must use `ConfirmedUser`, not
+  `CurrentUser` (the token's email claim does not prove the address was confirmed).
+- Delivering changes as zips: a zip cannot delete files, so list deleted or moved files explicitly.
 - No decorative UI: every control must work.
 - Commit at logical milestones with clear messages.
 

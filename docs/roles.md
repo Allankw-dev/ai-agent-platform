@@ -32,7 +32,8 @@ grants nothing inside organizations today.
   (`<FRONTEND_URL>/invite/<token>`). Only a SHA-256 hash of the token is stored, so the link
   cannot be shown again. Email delivery is not built yet: share the link yourself.
 - Invitations expire after 7 days (`INVITATION_TTL_DAYS`).
-- To accept, the person signs in with the **same email** the invitation was sent to.
+- To accept, the person signs in with the **same email** the invitation was sent to, and that email
+  must be confirmed: the API checks this with Supabase's Auth server (see `docs/auth.md`).
 - One open invitation per email per organization; expired ones no longer block a new one.
 
 Every change above is written to the audit log.

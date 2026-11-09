@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
+from sqlalchemy import text
 
 from tests.integration.api_helpers import Api
 
@@ -150,11 +151,17 @@ async def test_deleting_removes_the_organization_and_everything_in_it(acme: Acme
     for table in ("organization_members", "agents", "organization_invitations"):
         count = acme.api.scalar(f"SELECT count(*) FROM {table} WHERE org_id = :o", o=acme.org_id)
         assert count == 0, table
-    # The audit trail survives the organization it describes.
-    assert (
-        acme.api.scalar("SELECT count(*) FROM audit_logs WHERE action = 'organization.deleted'")
-        == 1
-    )
+    # The audit trail survives the organization it describes and still points at it.
+    with acme.api.owner.connect() as conn:
+        row = conn.execute(
+            text(
+                "SELECT org_id, resource_id, details FROM audit_logs "
+                "WHERE action = 'organization.deleted'"
+            )
+        ).one()
+    assert str(row.org_id) == acme.org_id
+    assert row.resource_id == acme.org_id
+    assert row.details == {"name": "Acme Inc", "slug": "acme-inc", "member_count": 4}
     # The other organization is untouched.
     assert (await acme.api.get(STRANGER, "/api/v1/organizations")).json()["total"] == 1
 

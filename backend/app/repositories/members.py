@@ -64,3 +64,12 @@ async def delete_member(session: AsyncSession, org_id: uuid.UUID, user_id: uuid.
             OrganizationMember.org_id == org_id, OrganizationMember.user_id == user_id
         )
     )
+
+
+async def count_members(session: AsyncSession, org_id: uuid.UUID) -> int:
+    count = await session.scalar(
+        select(func.count())
+        .select_from(OrganizationMember)
+        .where(OrganizationMember.org_id == org_id)
+    )
+    return int(count or 0)

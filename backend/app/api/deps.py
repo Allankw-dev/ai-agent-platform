@@ -9,6 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.context import OrgContext
+from app.core.auth_server import AuthServer, SupabaseAuthServer
 from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.core.permissions import Permission, has_permission
@@ -36,6 +37,14 @@ def get_token_verifier() -> TokenVerifier:
     return _build_verifier(settings.supabase_url.rstrip("/"), settings.supabase_jwt_audience)
 
 
+def get_auth_server() -> AuthServer:
+    settings = get_settings()
+    key = settings.supabase_publishable_key
+    if not settings.supabase_url or key is None:
+        raise ApiError(503, "auth_not_configured", "Authentication is not configured.")
+    return SupabaseAuthServer(settings.supabase_url, key.get_secret_value())
+
+
 def get_claims(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     verifier: Annotated[TokenVerifier, Depends(get_token_verifier)],
@@ -61,6 +70,38 @@ async def get_current_user(
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
+
+async def require_confirmed_email(
+    claims: Annotated[AuthClaims, Depends(get_claims)],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+    server: Annotated[AuthServer, Depends(get_auth_server)],
+    user: CurrentUser,
+) -> User:
+    """For actions that trust the user's email address (such as accepting an invitation).
+
+    The token's email claim is not enough on its own: ask the Auth server whether the address was
+    confirmed, and that it is the same account the token names. Fails closed.
+    """
+    if credentials is None:  # pragma: no cover - get_claims already rejected a missing token
+        raise ApiError(401, "not_authenticated", "Authentication is required.")
+    remote = await server.get_user(credentials.credentials)
+    if remote.id != claims.user_id or remote.email != claims.email:
+        raise ApiError(
+            401,
+            "invalid_token",
+            "The access token is invalid or has expired.",
+            headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+        )
+    if not remote.email_confirmed:
+        raise ApiError(
+            403,
+            "email_not_confirmed",
+            "Confirm your email address before accepting an invitation.",
+        )
+    return user
+
+
+ConfirmedUser = Annotated[User, Depends(require_confirmed_email)]
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 

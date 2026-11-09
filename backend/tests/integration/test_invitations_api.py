@@ -233,3 +233,48 @@ async def test_invitation_activity_is_audited(acme: Acme) -> None:
     assert {"invitation.created", "invitation.accepted", "invitation.revoked"} <= {
         r[0] for r in rows
     }
+
+
+# ---------- the email must be confirmed with the Auth server ----------
+
+
+async def test_an_unconfirmed_email_cannot_accept_an_invitation(acme: Acme) -> None:
+    """Without email confirmation, anyone could register an invited address and walk in."""
+    token = Acme.token_of(await acme.invite(ADMIN, NEWBIE))
+    acme.api.auth_server.unconfirmed.add(NEWBIE)
+
+    response = await acme.accept(NEWBIE, token)
+    assert response.status_code == 403 and _code(response) == "email_not_confirmed"
+    assert (await acme.api.get(NEWBIE, acme.base)).status_code == 404  # not a member
+    listing = (await acme.api.get(ADMIN, f"{acme.base}/invitations")).json()
+    assert listing["items"][0]["status"] == "pending"  # the invitation was not consumed
+
+    acme.api.auth_server.unconfirmed.clear()  # they confirm their address
+    assert (await acme.accept(NEWBIE, token)).status_code == 200
+
+
+async def test_the_auth_server_must_agree_with_the_token_about_who_this_is(acme: Acme) -> None:
+    token = Acme.token_of(await acme.invite(ADMIN, NEWBIE))
+    acme.api.auth_server.reports_other_email[NEWBIE] = "someone-else@example.com"
+    response = await acme.accept(NEWBIE, token)
+    assert response.status_code == 401 and _code(response) == "invalid_token"
+    assert (await acme.api.get(NEWBIE, acme.base)).status_code == 404
+
+
+async def test_accepting_fails_closed_when_the_auth_server_is_down(acme: Acme) -> None:
+    token = Acme.token_of(await acme.invite(ADMIN, NEWBIE))
+    acme.api.auth_server.down = True
+    response = await acme.accept(NEWBIE, token)
+    assert response.status_code == 503 and _code(response) == "auth_unavailable"
+    assert (await acme.api.get(NEWBIE, acme.base)).status_code == 404
+
+
+async def test_only_accepting_an_invitation_calls_the_auth_server(acme: Acme) -> None:
+    server = acme.api.auth_server
+    await acme.api.get(OWNER, "/api/v1/organizations")
+    await acme.api.get(OWNER, f"{acme.base}/members")
+    token = Acme.token_of(await acme.invite(ADMIN, NEWBIE))
+    assert server.calls == 0  # ordinary requests never pay for the extra round trip
+
+    assert (await acme.accept(NEWBIE, token)).status_code == 200
+    assert server.calls == 1

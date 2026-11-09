@@ -42,9 +42,9 @@ class AuditLog(UUIDPrimaryKeyMixin, Base):
 
     __tablename__ = "audit_logs"
 
-    org_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("organizations.id", ondelete="SET NULL"), index=True
-    )
+    # Deliberately NOT a foreign key: the log must outlive the organization it describes and
+    # keep pointing at it, which a FK (even ON DELETE SET NULL) would not allow.
+    org_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
