@@ -160,8 +160,8 @@ def test_cannot_update_or_delete_another_organizations_rows(world: World) -> Non
         )
         assert updated.rowcount == 0
         for table in TENANT_TABLES:
-            if table == "audit_logs":
-                continue  # append-only, covered separately
+            if table in ("audit_logs", "agent_versions", "agent_tools"):
+                continue  # append-only / immutable, covered separately
             deleted = conn.execute(
                 text(f"DELETE FROM {table} WHERE org_id = :o"), {"o": world.b.org}
             )
@@ -351,4 +351,25 @@ def test_audit_entries_outlive_their_organization(world: World) -> None:
     with acting_as(world, org=world.b.org) as conn:
         assert (
             _scalar(conn, "SELECT count(*) FROM audit_logs WHERE org_id = :o", o=world.a.org) == 0
+        )
+
+
+def test_agent_versions_are_immutable_for_the_runtime_role(world: World) -> None:
+    """A version is a snapshot: it can be added and read, never edited or removed."""
+    for sql in (
+        "UPDATE agent_versions SET model = 'tampered'",
+        "DELETE FROM agent_versions",
+        "UPDATE agent_tools SET requires_approval = false",
+        "DELETE FROM agent_tools",
+    ):
+        with pytest.raises(ProgrammingError), acting_as(world, org=world.a.org) as conn:
+            conn.execute(text(sql))
+    with acting_as(world, org=world.a.org) as conn:
+        assert _scalar(conn, "SELECT count(*) FROM agent_versions") == 1
+        conn.execute(
+            text(
+                "INSERT INTO agent_versions (org_id, agent_id, version, system_instructions, model) "
+                "VALUES (:o, :a, 2, 'new', 'm')"
+            ),
+            {"o": world.a.org, "a": world.a.agent},
         )

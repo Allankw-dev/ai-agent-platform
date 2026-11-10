@@ -44,8 +44,18 @@ class Settings(BaseSettings):
         ),
     )
 
-    # Anthropic (Phase 3)
+    # LLM providers. Providers are swappable: each agent version names its provider and model.
+    enabled_llm_providers: list[str] = ["gemini"]
+    gemini_api_key: SecretStr | None = None
+    # "free" means Google may use prompts to improve its products: development with fake data only.
+    gemini_tier: Literal["free", "paid"] = "free"
     anthropic_api_key: SecretStr | None = None
+
+    # Platform ceilings for per-agent run limits (agents may choose lower values).
+    agent_max_iterations_ceiling: int = 25
+    agent_timeout_ceiling_seconds: int = 300
+    agent_token_budget_ceiling: int = 500_000
+    agent_cost_budget_ceiling_usd: float = 5.0
 
     # Credential encryption (Phase 4)
     credential_encryption_key: SecretStr | None = None

@@ -11,6 +11,8 @@ grants nothing inside organizations today.
 | Delete the organization | yes | no | no | no |
 | Invite people, view and revoke invitations | yes | yes | no | no |
 | Change roles / remove others | yes | below own level | no | no |
+| View agents | yes | yes | yes | yes |
+| Create, edit, version, roll back, duplicate, enable/disable, delete agents | yes | yes | yes | no |
 | Leave the organization | yes* | yes | yes | yes |
 
 \* unless they are the last owner.

@@ -33,7 +33,7 @@ erDiagram
     organization_members { uuid id PK; uuid org_id FK; uuid user_id FK; string role }
     organization_invitations { uuid id PK; uuid org_id FK; string email; string role; string token_hash UK; timestamp expires_at; timestamp accepted_at; timestamp revoked_at }
     agents { uuid id PK; uuid org_id FK; string name; string status; uuid current_version_id FK; timestamp deleted_at }
-    agent_versions { uuid id PK; uuid agent_id FK; int version; text system_instructions; string model; jsonb limits }
+    agent_versions { uuid id PK; uuid agent_id FK; int version; string provider; string model; text system_instructions; jsonb limits }
     tools { uuid id PK; string key UK; jsonb input_schema; bool is_sensitive }
     agent_tools { uuid id PK; uuid agent_version_id FK; uuid tool_id FK; bool requires_approval }
     integrations { uuid id PK; uuid org_id FK; string provider; string name }
