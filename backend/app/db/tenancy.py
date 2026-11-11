@@ -16,7 +16,9 @@ from sqlalchemy.orm import Session, SessionTransaction
 INFO_KEY = "tenant_context"
 
 _SET_CONTEXT = text(
-    "SELECT set_config('app.user_id', :user_id, true), set_config('app.org_id', :org_id, true)"
+    "SELECT set_config('app.user_id', :user_id, true), "
+    "set_config('app.org_id', :org_id, true), "
+    "set_config('app.invite_hash', :invite_hash, true)"
 )
 
 
@@ -24,12 +26,16 @@ _SET_CONTEXT = text(
 class TenantContext:
     user_id: uuid.UUID | None = None
     org_id: uuid.UUID | None = None
+    # SHA-256 of an invitation token. Lets the holder of the token (and only them) look the
+    # invitation up before they belong to the organization.
+    invite_hash: str | None = None
 
     def params(self) -> dict[str, str]:
         # An empty string means "unset"; the SQL helper functions map it to NULL.
         return {
             "user_id": str(self.user_id) if self.user_id else "",
             "org_id": str(self.org_id) if self.org_id else "",
+            "invite_hash": self.invite_hash or "",
         }
 
 
@@ -47,8 +53,9 @@ async def use_tenant(
     *,
     user_id: uuid.UUID | None = None,
     org_id: uuid.UUID | None = None,
+    invite_hash: str | None = None,
 ) -> None:
     """Set the tenant context now and for every later transaction of this session."""
-    context = TenantContext(user_id=user_id, org_id=org_id)
+    context = TenantContext(user_id=user_id, org_id=org_id, invite_hash=invite_hash)
     session.sync_session.info[INFO_KEY] = context
     await session.execute(_SET_CONTEXT, context.params())

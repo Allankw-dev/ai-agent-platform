@@ -10,6 +10,7 @@ EXPECTED_TABLES = {
     "users",
     "organizations",
     "organization_members",
+    "organization_invitations",
     "tools",
     "agents",
     "agent_versions",
