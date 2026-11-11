@@ -76,8 +76,3 @@ class MessageRole(enum.StrEnum):
     ASSISTANT = "assistant"
     TOOL = "tool"
     SYSTEM = "system"
-
-
-class LLMProvider(enum.StrEnum):
-    GEMINI = "gemini"
-    ANTHROPIC = "anthropic"

@@ -26,7 +26,7 @@ from app.models.base import (
     nullable_timestamp,
     tenant_fk,
 )
-from app.models.enums import AgentStatus, IntegrationProvider, LLMProvider
+from app.models.enums import AgentStatus, IntegrationProvider
 
 
 class Tool(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -90,9 +90,6 @@ class AgentVersion(UUIDPrimaryKeyMixin, TenantMixin, Base):
     version: Mapped[int] = mapped_column(Integer)
     system_instructions: Mapped[str] = mapped_column(Text)
     objectives: Mapped[str | None] = mapped_column(Text)
-    provider: Mapped[LLMProvider] = mapped_column(
-        enum_column(LLMProvider, "provider"), server_default=LLMProvider.GEMINI.value
-    )
     model: Mapped[str] = mapped_column(String(100))
     model_params: Mapped[dict[str, Any]] = json_object()
     memory_config: Mapped[dict[str, Any]] = json_object()

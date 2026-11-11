@@ -7,9 +7,8 @@ in which case they fail loudly.
 
 import os
 import uuid
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pytest
 from alembic.config import Config
@@ -19,9 +18,6 @@ from sqlalchemy.exc import OperationalError
 
 from alembic import command
 from app.core.config import get_settings
-
-if TYPE_CHECKING:
-    from tests.integration.api_helpers import Api
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -99,36 +95,3 @@ def runtime_url(migrated_url: str) -> str:
         _require_or_skip("runtime role agent_app is missing (see docker/postgres-init.sql)")
     url = make_url(migrated_url).set(username="agent_app", password="agent_app")
     return url.render_as_string(hide_password=False)
-
-
-@pytest.fixture
-async def api(runtime_url: str, engine: Engine) -> AsyncIterator["Api"]:
-    """The real FastAPI app on a fresh migrated database, connected as the restricted role."""
-    from httpx import ASGITransport, AsyncClient
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-    from app.api.deps import get_auth_server, get_token_verifier
-    from app.core.security import TokenVerifier
-    from app.db.session import get_session
-    from app.main import app
-    from tests.auth_helpers import AUDIENCE, ISSUER, StaticKeys, new_key
-    from tests.integration.api_helpers import Api
-
-    key = new_key()
-    runtime_engine = create_async_engine(runtime_url)
-    maker = async_sessionmaker(runtime_engine, expire_on_commit=False)
-
-    async def session_override() -> AsyncIterator[AsyncSession]:
-        async with maker() as session:
-            yield session
-
-    app.dependency_overrides[get_session] = session_override
-    app.dependency_overrides[get_token_verifier] = lambda: TokenVerifier(
-        StaticKeys(key), issuer=ISSUER, audience=AUDIENCE
-    )
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        api_driver = Api(client, key, engine)
-        app.dependency_overrides[get_auth_server] = lambda: api_driver.auth_server
-        yield api_driver
-    app.dependency_overrides.clear()
-    await runtime_engine.dispose()

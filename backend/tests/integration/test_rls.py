@@ -36,20 +36,13 @@ def world(engine: Engine, runtime_url: str) -> Iterator[World]:
 
 @contextmanager
 def acting_as(
-    world: World,
-    *,
-    user: uuid.UUID | None = None,
-    org: uuid.UUID | None = None,
-    invite_hash: str | None = None,
+    world: World, *, user: uuid.UUID | None = None, org: uuid.UUID | None = None
 ) -> Iterator[Connection]:
     """A runtime-role transaction with the tenant context set, like one API request."""
     with world.runtime.begin() as conn:
         conn.execute(
-            text(
-                "SELECT set_config('app.user_id', :u, true), set_config('app.org_id', :o, true), "
-                "set_config('app.invite_hash', :h, true)"
-            ),
-            {"u": str(user) if user else "", "o": str(org) if org else "", "h": invite_hash or ""},
+            text("SELECT set_config('app.user_id', :u, true), set_config('app.org_id', :o, true)"),
+            {"u": str(user) if user else "", "o": str(org) if org else ""},
         )
         yield conn
 
@@ -160,8 +153,8 @@ def test_cannot_update_or_delete_another_organizations_rows(world: World) -> Non
         )
         assert updated.rowcount == 0
         for table in TENANT_TABLES:
-            if table in ("audit_logs", "agent_versions", "agent_tools"):
-                continue  # append-only / immutable, covered separately
+            if table == "audit_logs":
+                continue  # append-only, covered separately
             deleted = conn.execute(
                 text(f"DELETE FROM {table} WHERE org_id = :o"), {"o": world.b.org}
             )
@@ -301,75 +294,3 @@ def test_context_does_not_leak_into_the_next_transaction(world: World) -> None:
             assert _scalar(conn, "SELECT count(*) FROM agents") == 1
         with conn.begin():
             assert _scalar(conn, "SELECT count(*) FROM agents") == 0
-
-
-# ---------- invitations ----------
-
-
-def test_invite_token_reveals_exactly_one_invitation(world: World) -> None:
-    """Holding a token lets you see that invitation, even from outside the organization."""
-    with acting_as(world, invite_hash=world.a.invite_hash) as conn:
-        assert _scalar(conn, "SELECT count(*) FROM organization_invitations") == 1
-        assert (
-            _scalar(
-                conn,
-                "SELECT count(*) FROM organization_invitations WHERE org_id = :o",
-                o=world.b.org,
-            )
-            == 0
-        )
-
-
-def test_wrong_token_reveals_nothing(world: World) -> None:
-    with acting_as(world, invite_hash="0" * 64) as conn:
-        assert _scalar(conn, "SELECT count(*) FROM organization_invitations") == 0
-
-
-def test_invite_token_does_not_unlock_other_tables(world: World) -> None:
-    with acting_as(world, invite_hash=world.a.invite_hash) as conn:
-        for table in ("agents", "organization_members", "agent_runs", "credentials"):
-            assert _scalar(conn, f"SELECT count(*) FROM {table}") == 0, table
-
-
-def test_invite_token_does_not_allow_writing_to_the_organization(world: World) -> None:
-    with pytest.raises(ProgrammingError), acting_as(world, invite_hash=world.a.invite_hash) as conn:
-        conn.execute(
-            text(
-                "INSERT INTO organization_members (org_id, user_id, role) VALUES (:o, :u, 'member')"
-            ),
-            {"o": world.a.org, "u": world.b.user},
-        )
-
-
-def test_audit_entries_outlive_their_organization(world: World) -> None:
-    """Deleting an organization must not detach its history from it."""
-    with world.owner.begin() as conn:
-        conn.execute(text("DELETE FROM organizations WHERE id = :o"), {"o": world.a.org})
-        kept = _scalar(conn, "SELECT count(*) FROM audit_logs WHERE org_id = :o", o=world.a.org)
-    assert kept == 1
-    # Nobody acting within another organization can read them.
-    with acting_as(world, org=world.b.org) as conn:
-        assert (
-            _scalar(conn, "SELECT count(*) FROM audit_logs WHERE org_id = :o", o=world.a.org) == 0
-        )
-
-
-def test_agent_versions_are_immutable_for_the_runtime_role(world: World) -> None:
-    """A version is a snapshot: it can be added and read, never edited or removed."""
-    for sql in (
-        "UPDATE agent_versions SET model = 'tampered'",
-        "DELETE FROM agent_versions",
-        "UPDATE agent_tools SET requires_approval = false",
-        "DELETE FROM agent_tools",
-    ):
-        with pytest.raises(ProgrammingError), acting_as(world, org=world.a.org) as conn:
-            conn.execute(text(sql))
-    with acting_as(world, org=world.a.org) as conn:
-        assert _scalar(conn, "SELECT count(*) FROM agent_versions") == 1
-        conn.execute(
-            text(
-                "INSERT INTO agent_versions (org_id, agent_id, version, system_instructions, model) "
-                "VALUES (:o, :a, 2, 'new', 'm')"
-            ),
-            {"o": world.a.org, "a": world.a.agent},
-        )

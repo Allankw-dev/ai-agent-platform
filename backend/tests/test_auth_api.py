@@ -10,7 +10,7 @@ from app.api.deps import get_token_verifier
 from app.core.config import Settings
 from app.core.security import TokenVerifier
 from app.main import app
-from tests.auth_helpers import AUDIENCE, ISSUER, StaticKeys, make_token, new_key
+from tests.auth_helpers import AUDIENCE, ISSUER, StaticKeys, new_key
 
 
 @pytest.fixture
@@ -52,31 +52,3 @@ async def test_unknown_route_uses_the_structured_shape(client: AsyncClient) -> N
     response = await client.get("/api/v1/nope")
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "http_404"
-
-
-async def test_accepting_an_invitation_fails_closed_when_the_auth_server_is_not_configured(
-    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.delenv("SUPABASE_PUBLISHABLE_KEY", raising=False)
-    monkeypatch.delenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", raising=False)
-    key = new_key()
-    app.dependency_overrides[get_token_verifier] = lambda: TokenVerifier(
-        StaticKeys(key), issuer=ISSUER, audience=AUDIENCE
-    )
-    monkeypatch.setattr(
-        deps,
-        "get_settings",
-        lambda: Settings(_env_file=None, supabase_url="https://abcdefgh.supabase.co"),
-    )
-    response = await client.post(
-        "/api/v1/invitations/accept",
-        json={"token": "x" * 43},
-        headers={"Authorization": f"Bearer {make_token(key)}"},
-    )
-    assert response.status_code == 503
-    assert response.json()["error"]["code"] == "auth_not_configured"
-
-
-async def test_accepting_an_invitation_still_requires_a_token(client: AsyncClient) -> None:
-    response = await client.post("/api/v1/invitations/accept", json={"token": "x" * 43})
-    assert response.status_code in (401, 503)

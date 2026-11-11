@@ -1,6 +1,5 @@
 """Seed one row in every tenant table for an organization (as the owner role)."""
 
-import hashlib
 import uuid
 from dataclasses import dataclass
 
@@ -21,7 +20,6 @@ TENANT_TABLES = (
     "messages",
     "usage_records",
     "audit_logs",
-    "organization_invitations",
 )
 
 
@@ -30,7 +28,6 @@ class OrgData:
     org: uuid.UUID
     user: uuid.UUID
     agent: uuid.UUID
-    invite_hash: str
 
 
 def _one(conn: Connection, sql: str, **params: object) -> uuid.UUID:
@@ -124,12 +121,4 @@ def seed_org(conn: Connection, slug: str, tool: uuid.UUID) -> OrgData:
         text("INSERT INTO audit_logs (org_id, action, resource_type) VALUES (:o, 'seed', 'org')"),
         {"o": org},
     )
-    invite_hash = hashlib.sha256(f"token-{slug}".encode()).hexdigest()
-    conn.execute(
-        text(
-            "INSERT INTO organization_invitations (org_id, email, role, token_hash, expires_at) "
-            "VALUES (:o, :e, 'member', :h, now() + interval '7 days')"
-        ),
-        {"o": org, "e": f"invitee-{slug}@example.com", "h": invite_hash},
-    )
-    return OrgData(org=org, user=user, agent=agent, invite_hash=invite_hash)
+    return OrgData(org=org, user=user, agent=agent)
