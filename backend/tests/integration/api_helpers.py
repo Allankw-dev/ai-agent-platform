@@ -52,7 +52,8 @@ class Api:
         return make_token(self.key, user_id=self.user_id(email), email=email)
 
     async def request(self, email: str, method: str, path: str, **kwargs: Any) -> httpx.Response:
-        headers = {"Authorization": f"Bearer {self.token(email)}"}
+        extra = kwargs.pop("headers", None) or {}
+        headers = {"Authorization": f"Bearer {self.token(email)}", **extra}
         return await self.client.request(method, path, headers=headers, **kwargs)
 
     async def get(self, email: str, path: str, **kw: Any) -> httpx.Response:

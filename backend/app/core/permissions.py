@@ -23,6 +23,8 @@ class Permission(enum.StrEnum):
     MEMBERS_MANAGE = "members:manage"  # invite, change roles, remove, list invitations
     AGENTS_VIEW = "agents:view"
     AGENTS_MANAGE = "agents:manage"  # create, edit, version, roll back, duplicate, enable, delete
+    RUNS_VIEW = "runs:view"
+    RUNS_CREATE = "runs:create"  # start and cancel runs
 
 
 _ALL = frozenset(OrgRole)
@@ -34,6 +36,8 @@ GRANTS: dict[Permission, frozenset[OrgRole]] = {
     Permission.MEMBERS_MANAGE: frozenset({OrgRole.OWNER, OrgRole.ADMIN}),
     Permission.AGENTS_VIEW: _ALL,
     Permission.AGENTS_MANAGE: frozenset({OrgRole.OWNER, OrgRole.ADMIN, OrgRole.DEVELOPER}),
+    Permission.RUNS_VIEW: _ALL,
+    Permission.RUNS_CREATE: frozenset({OrgRole.OWNER, OrgRole.ADMIN, OrgRole.DEVELOPER}),
 }
 
 

@@ -35,8 +35,8 @@ request says otherwise.
 ## Permissions
 
 Everyone in an organization can view agents. Owners, admins and developers can create, edit,
-version, roll back, duplicate, enable/disable and delete them. Running agents is added with the
-engine.
+version, roll back, duplicate, enable/disable and delete them. Starting and cancelling runs is limited to the
+same roles; everyone can view runs. See `docs/engine.md`.
 
 ## Providers
 

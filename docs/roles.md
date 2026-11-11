@@ -13,6 +13,8 @@ grants nothing inside organizations today.
 | Change roles / remove others | yes | below own level | no | no |
 | View agents | yes | yes | yes | yes |
 | Create, edit, version, roll back, duplicate, enable/disable, delete agents | yes | yes | yes | no |
+| View runs and their steps | yes | yes | yes | yes |
+| Start and cancel runs | yes | yes | yes | no |
 | Leave the organization | yes* | yes | yes | yes |
 
 \* unless they are the last owner.
