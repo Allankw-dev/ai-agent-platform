@@ -12,6 +12,8 @@ No SDK is needed: the engine uses one endpoint and a handful of fields. Notes th
 """
 
 import asyncio
+import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -29,6 +31,9 @@ from app.engine.llm import (
 log = structlog.get_logger()
 
 RETRY_DELAYS = (2.0, 6.0)  # seconds between attempts for 429 / 5xx (so three attempts in all)
+# A request that already made us wait this long before failing will not recover in a few seconds
+# (an overloaded model can take close to a minute to say so), so it is not retried.
+SLOW_FAILURE_SECONDS = 15.0
 
 # The subset of JSON Schema that Gemini's function declarations understand.
 _SCHEMA_KEYS = {
@@ -134,6 +139,11 @@ def _error_for_status(status: int, model: str) -> LLMError:
             "The AI provider is rate limiting requests (free tiers have strict per-minute "
             "limits). Wait a minute and try again."
         )
+    if status == 503:
+        return LLMError(
+            f"The model {model!r} is overloaded right now (HTTP 503). Try again in a few "
+            "minutes or choose another model."
+        )
     if status >= 500:
         return LLMError("The AI provider is temporarily unavailable. Try again soon.")
     return LLMError(f"The AI provider rejected the request (HTTP {status}).")
@@ -148,12 +158,14 @@ class GeminiClient:
         timeout: float,
         retry_delays: tuple[float, ...] = RETRY_DELAYS,
         transport: httpx.AsyncBaseTransport | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
         self._retry_delays = retry_delays
         self._transport = transport
+        self._clock = clock
 
     async def complete(
         self,
@@ -192,10 +204,18 @@ class GeminiClient:
         attempts = len(self._retry_delays) + 1
         async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as client:
             for attempt in range(attempts):
+                started = self._clock()
                 try:
                     response = await client.post(url, json=body, headers=headers)
+                except httpx.ConnectTimeout as exc:
+                    log.warning("llm.connect_timeout", model=model)
+                    raise LLMError("The AI provider could not be reached.") from exc
                 except httpx.TimeoutException as exc:
-                    raise LLMError("The AI provider took too long to answer.") from exc
+                    log.warning("llm.read_timeout", model=model, seconds=self._timeout)
+                    raise LLMError(
+                        f"The model {model!r} did not answer within {self._timeout:g} seconds; it "
+                        "may be overloaded. Try again or choose another model."
+                    ) from exc
                 except httpx.HTTPError as exc:
                     log.warning("llm.connection_error", model=model, error=type(exc).__name__)
                     raise LLMError("The AI provider could not be reached.") from exc
@@ -204,7 +224,8 @@ class GeminiClient:
                     payload = response.json()
                     return payload if isinstance(payload, dict) else {}
                 retryable = response.status_code == 429 or response.status_code >= 500
-                if retryable and attempt < attempts - 1:
+                slow = self._clock() - started > SLOW_FAILURE_SECONDS
+                if retryable and not slow and attempt < attempts - 1:
                     await asyncio.sleep(self._retry_delays[attempt])
                     continue
                 log.warning("llm.status_error", status=response.status_code, model=model)

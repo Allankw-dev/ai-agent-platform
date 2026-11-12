@@ -76,6 +76,21 @@ Gemini notes:
   limits**; a run that hits them fails with a clear message. Free-tier prompts may be used by
   Google to improve its products (`GEMINI_TIER=free`): use fake or public data only.
 
+## Troubleshooting model calls
+
+A failed model call shows its reason in the run's `error` field and on the failed step:
+
+| Message | Meaning | What to do |
+| --- | --- | --- |
+| `The model 'x' is overloaded right now (HTTP 503)` | Google has no capacity for that model. Common on free tiers, and it can take about a minute to say so. | Try again later or pick another model. |
+| `The model 'x' did not answer within N seconds` | The model was too slow (`LLM_TIMEOUT_SECONDS`, default 60). | Same as above. |
+| `The AI provider could not be reached` | The container cannot connect (network, proxy, VPN). | Check Docker's network access. |
+| `... rate limiting requests` | Free-tier per-minute limit (HTTP 429). | Wait a minute. |
+| `... does not know the model 'x'` | The name does not exist for your key. | Run `.\scripts\check-gemini-models.ps1`. |
+
+An overloaded or slow model is not retried when its failure already took more than 15 seconds,
+because retrying would only use up the run's time limit.
+
 ## Lifecycle and failure handling
 
 - Starting a run is refused up front (503 `ai_not_configured`) if the agent's provider has no key.

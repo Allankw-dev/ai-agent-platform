@@ -302,7 +302,9 @@ async def test_a_blocked_prompt_is_a_refusal() -> None:
         (404, "does not know the model"),
         (400, "rejected the request"),
         (429, "rate limiting"),
-        (503, "temporarily unavailable"),
+        (500, "temporarily unavailable"),
+        (502, "temporarily unavailable"),
+        (503, "overloaded right now"),
     ],
 )
 async def test_http_errors_become_safe_messages(status: int, fragment: str) -> None:
@@ -353,14 +355,41 @@ async def test_client_errors_are_not_retried() -> None:
     assert attempts["n"] == 1
 
 
-async def test_timeouts_and_connection_errors() -> None:
+async def test_slow_answers_and_unreachable_networks_get_different_messages() -> None:
     def slow(request: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("too slow", request=request)
+
+    def no_route(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("no route", request=request)
 
     def down(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("refused", request=request)
 
-    with pytest.raises(LLMError, match="too long"):
+    with pytest.raises(LLMError, match=r"'gemini-x' did not answer within 5 seconds.*overloaded"):
         await complete(client(slow))
     with pytest.raises(LLMError, match="could not be reached"):
+        await complete(client(no_route))
+    with pytest.raises(LLMError, match="could not be reached"):
         await complete(client(down))
+
+
+async def test_an_overloaded_model_that_made_us_wait_is_not_retried() -> None:
+    """Google took ~54 s to say 503 in practice; retrying that would blow the run's time limit."""
+    attempts = {"n": 0}
+    clock_values = iter([0.0, 54.0])  # request started at 0 s, failed at 54 s
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["n"] += 1
+        return httpx.Response(503, json={})
+
+    gemini = GeminiClient(
+        api_key=SECRET,
+        base_url="https://gemini.test/v1beta",
+        timeout=60,
+        retry_delays=(0.0, 0.0),
+        transport=httpx.MockTransport(handler),
+        clock=lambda: next(clock_values),
+    )
+    with pytest.raises(LLMError, match="overloaded right now"):
+        await complete(gemini)
+    assert attempts["n"] == 1

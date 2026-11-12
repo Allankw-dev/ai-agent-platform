@@ -1,12 +1,15 @@
 # Usage (from the repo root, with the stack running):
 #   .\scripts\try-agent.ps1
-#   .\scripts\try-agent.ps1 -Message "What is 15% of 2400?" -Model "gemini-flash-latest"
+#   .\scripts\try-agent.ps1 -Message "What is 15% of 2400?" -Model "gemini-flash-lite-latest"
+#
+# Free-tier models are sometimes overloaded (HTTP 503). If a run fails with that, try another
+# model; .\scripts\check-gemini-models.ps1 shows which ones answer quickly for your key.
 #
 # Signs in to Supabase, creates a small agent with the calculator tool, runs it once, waits for the
 # result and prints it with every step. Creates one new agent each time you run it.
 param(
     [string]$Message = "What is (1200 * 0.16) + 45?",
-    [string]$Model = "gemini-flash-latest"
+    [string]$Model = "gemini-3-flash-preview"
 )
 
 $ErrorActionPreference = "Stop"
