@@ -36,6 +36,8 @@ services:
       DATABASE_URL: postgresql+psycopg://agent_app:agent_app@db:5432/agentplatform
       MIGRATION_DATABASE_URL: postgresql+psycopg://app:app@db:5432/agentplatform
       REDIS_URL: redis://redis:6379/0
+      # Windows bind mounts do not deliver file events reliably; polling avoids a reloader crash.
+      WATCHFILES_FORCE_POLLING: "true"
     ports:
       - "8000:8000"
     volumes:

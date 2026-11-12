@@ -19,7 +19,7 @@ const features: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: Bot,
     title: "Versioned agents",
-    body: "Write instructions, pick a Claude model and set limits. Every change is a version you can roll back.",
+    body: "Write instructions, pick a model and set limits. Every change is a version you can roll back.",
   },
   {
     icon: Plug,
@@ -53,7 +53,7 @@ const steps = [
   { title: "Run a task", body: "Start it manually or from the playground." },
   {
     title: "The agent works in a loop",
-    body: "Claude asks to use a tool; the platform validates the request, checks permissions and runs it.",
+    body: "The model asks to use a tool; the platform validates the request, checks permissions and runs it.",
   },
   {
     title: "Approve what matters",
@@ -81,8 +81,8 @@ export default function Home() {
             AI agents that do real work, under your control
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
-            Build agents on Claude, connect the tools your team already uses, and approve the
-            actions that matter. Every step is validated, permissioned and logged.
+            Build AI agents, connect the tools your team already uses, and approve the actions that
+            matter. Every step is validated, permissioned and logged.
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
             <Link href="/register" className={buttonVariants({ size: "lg" })}>
