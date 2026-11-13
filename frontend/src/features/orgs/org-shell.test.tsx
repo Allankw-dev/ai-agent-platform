@@ -55,6 +55,23 @@ describe("OrgShell", () => {
     );
   });
 
+  it("has an Agents tab that stays highlighted on nested agent pages", async () => {
+    nav.pathname = "/orgs/org-1/agents/agent-1/edit";
+    routeApi({ "GET /organizations/org-1": ORG });
+    renderWithQuery(<OrgShell>x</OrgShell>);
+    const agents = await screen.findByRole("link", { name: "Agents" });
+    expect(agents).toHaveAttribute("href", "/orgs/org-1/agents");
+    expect(agents).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Overview" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Members" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("does not highlight Agents on other pages", async () => {
+    routeApi({ "GET /organizations/org-1": ORG });
+    renderWithQuery(<OrgShell>x</OrgShell>);
+    expect(await screen.findByRole("link", { name: "Agents" })).not.toHaveAttribute("aria-current");
+  });
+
   it("shows a not-found page, and no content, when the API says 404", async () => {
     routeApi({
       "GET /organizations/org-1": apiError(

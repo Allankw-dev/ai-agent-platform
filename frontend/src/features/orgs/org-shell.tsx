@@ -41,8 +41,9 @@ export function OrgShell({ children }: { children: React.ReactNode }) {
   if (error || !org) return <ErrorNotice error={error} />;
 
   const tabs = [
-    { href: `/orgs/${org.id}`, label: "Overview" },
-    { href: `/orgs/${org.id}/members`, label: "Members" },
+    { href: `/orgs/${org.id}`, label: "Overview", exact: true },
+    { href: `/orgs/${org.id}/agents`, label: "Agents", exact: false },
+    { href: `/orgs/${org.id}/members`, label: "Members", exact: true },
   ];
 
   return (
@@ -57,7 +58,10 @@ export function OrgShell({ children }: { children: React.ReactNode }) {
           </div>
           <nav aria-label="Organization" className="flex gap-1 border-b border-border">
             {tabs.map((tab) => {
-              const active = pathname === tab.href;
+              // Agents has nested pages (an agent, its editor); the others are single pages.
+              const active = tab.exact
+                ? pathname === tab.href
+                : pathname === tab.href || pathname.startsWith(`${tab.href}/`);
               return (
                 <Link
                   key={tab.href}

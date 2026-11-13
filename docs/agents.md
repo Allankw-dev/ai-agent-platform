@@ -38,6 +38,25 @@ Everyone in an organization can view agents. Owners, admins and developers can c
 version, roll back, duplicate, enable/disable and delete them. Starting and cancelling runs is limited to the
 same roles; everyone can view runs. See `docs/engine.md`.
 
+## In the app
+
+Organization pages have an **Agents** tab (`/orgs/{org}/agents`):
+
+- **List:** search by name, filter by status, and see each agent's status, version and model.
+- **Create / edit:** one form for details, behavior (model, instructions, objectives), tools, and
+  limits. The model is free text with suggestions, because model names change.
+- **Saving an edit:** changed behavior is saved as a **new version**; a changed name or
+  description updates the agent itself. Only what changed is sent, and saving with no changes
+  does nothing. If the new version saves but the rename is refused (for example the name is
+  taken), the page says so.
+- **Agent page:** the current configuration, **Activate / Disable / Enable**, **Duplicate**,
+  **Delete** (with confirmation), and the **version history**, where any version can be viewed and
+  (by managers) restored.
+- **Roles:** members see everything read-only. The buttons follow the same rules as the API, and
+  the API enforces them regardless.
+- **Not in the form yet:** per-tool settings and conversation memory are kept as they were when
+  editing, but cannot be changed from the screen.
+
 ## Providers
 
 Each version names its provider, so the engine can support several. Gemini is first. The free

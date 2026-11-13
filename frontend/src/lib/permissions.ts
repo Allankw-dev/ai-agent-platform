@@ -30,3 +30,7 @@ export const canAssign = (actor: OrgRole, newRole: OrgRole) =>
 /** Roles an invitation can carry: never owner. */
 export const invitableRoles = (actor: OrgRole): OrgRole[] =>
   ROLES.filter((role) => role !== "owner" && canAssign(actor, role));
+
+/** Create, edit, version, roll back, duplicate, enable/disable and delete agents. */
+export const canManageAgents = (role: OrgRole) =>
+  role === "owner" || role === "admin" || role === "developer";

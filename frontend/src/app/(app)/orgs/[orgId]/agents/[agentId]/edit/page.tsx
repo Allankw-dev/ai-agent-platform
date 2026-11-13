@@ -1,0 +1,15 @@
+import { Suspense } from "react";
+import type { Metadata } from "next";
+
+import { Spinner } from "@/components/ui/spinner";
+import { AgentEditPage } from "@/features/agents/agent-edit-page";
+
+export const metadata: Metadata = { title: "Edit agent" };
+
+export default function Page() {
+  return (
+    <Suspense fallback={<Spinner label="Loading agent" />}>
+      <AgentEditPage />
+    </Suspense>
+  );
+}

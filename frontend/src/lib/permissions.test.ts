@@ -4,6 +4,7 @@ import {
   canAssign,
   canDeleteOrganization,
   canManage,
+  canManageAgents,
   canManageMembers,
   canUpdateOrganization,
   invitableRoles,
@@ -53,5 +54,14 @@ describe("role rules (mirror of the API)", () => {
     expect(invitableRoles("owner")).toEqual(["admin", "developer", "member"]);
     expect(invitableRoles("admin")).toEqual(["developer", "member"]);
     expect(invitableRoles("member")).toEqual([]);
+  });
+});
+
+describe("agent permissions (mirror of the API)", () => {
+  it("owners, admins and developers manage agents; members only view them", () => {
+    for (const role of ["owner", "admin", "developer"] as const) {
+      expect(canManageAgents(role)).toBe(true);
+    }
+    expect(canManageAgents("member")).toBe(false);
   });
 });
