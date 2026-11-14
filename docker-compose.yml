@@ -58,7 +58,9 @@ services:
 
   worker:
     build: ./backend
-    command: celery -A app.workers.celery_app worker --loglevel=info
+    # Celery starts one process per CPU by default (16 on many laptops). Each one loads the whole
+    # engine (about 100 MB), which can exhaust Docker's memory. Two is plenty for local development.
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
     env_file:
       - path: .env
         required: false
