@@ -47,7 +47,9 @@ def create_app() -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allow_headers=["Authorization", "Content-Type"],
+        # Every custom header the browser sends must be listed, or its preflight check fails and
+        # the request never leaves the browser. Idempotency-Key is sent when starting a run.
+        allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
     )
 
     app.add_exception_handler(ApiError, api_error_handler)  # type: ignore[arg-type]

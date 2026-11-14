@@ -17,7 +17,11 @@ type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   query?: Record<string, string | number | undefined>;
-  /** Extra request headers, e.g. `Idempotency-Key`. They cannot replace Authorization. */
+  /**
+   * Extra request headers, e.g. `Idempotency-Key`. They cannot replace Authorization. Each one
+   * must also be listed in the API's CORS `allow_headers` (backend/app/main.py), or browsers block
+   * the request before it is sent.
+   */
   headers?: Record<string, string>;
   signal?: AbortSignal;
 };
