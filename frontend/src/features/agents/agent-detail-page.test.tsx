@@ -97,10 +97,30 @@ describe("AgentDetailPage", () => {
     }
   });
 
+  it("lets a manager run the agent from its page, and links to its runs", async () => {
+    routes();
+    renderPage("developer");
+    expect(await screen.findByRole("button", { name: "Run agent" })).toBeEnabled();
+    expect(screen.getByRole("link", { name: "See this agent's runs" })).toHaveAttribute(
+      "href",
+      "/orgs/org-1/runs?agent=agent-1",
+    );
+  });
+
+  it("does not offer to run a disabled agent", async () => {
+    routes({}, agent({ status: "disabled" }));
+    renderPage("owner");
+    expect(
+      await screen.findByText("This agent is disabled. Enable it to run it."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Run agent" })).not.toBeInTheDocument();
+  });
+
   it("gives members a read-only page", async () => {
     routes();
     renderPage("member");
     await screen.findByRole("heading", { name: "Math helper" });
+    expect(screen.queryByRole("button", { name: "Run agent" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Edit" })).not.toBeInTheDocument();
     for (const name of ["Disable", "Activate", "Enable", "Duplicate", "Delete"]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();

@@ -129,3 +129,48 @@ export type AgentConfigInput = {
   limits: Limits;
   tools: ToolAssignmentInput[];
 };
+
+// ---------- runs ----------
+
+export type RunStatus =
+  "queued" | "running" | "awaiting_approval" | "succeeded" | "failed" | "cancelled";
+export type StepType = "llm_call" | "tool_call" | "approval" | "error";
+export type StepStatus = "running" | "succeeded" | "failed" | "skipped";
+
+export type RunRead = {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  agent_version_id: string;
+  agent_version: number;
+  status: RunStatus;
+  trigger: "manual" | "test" | "api";
+  input: { message?: string };
+  output: { text?: string; iterations?: number } | null;
+  error: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  /** An estimate. 0 means "not estimated" when tokens were used (no prices configured). */
+  cost_usd: number;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+};
+
+export type RunStepRead = {
+  id: string;
+  sequence: number;
+  step_type: StepType;
+  status: StepStatus;
+  name: string | null;
+  tool_key: string | null;
+  input: Record<string, unknown> | null;
+  output: Record<string, unknown> | null;
+  error: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  started_at: string;
+  finished_at: string | null;
+};
+
+export type RunDetail = RunRead & { steps: RunStepRead[] };

@@ -43,6 +43,7 @@ export function OrgShell({ children }: { children: React.ReactNode }) {
   const tabs = [
     { href: `/orgs/${org.id}`, label: "Overview", exact: true },
     { href: `/orgs/${org.id}/agents`, label: "Agents", exact: false },
+    { href: `/orgs/${org.id}/runs`, label: "Runs", exact: false },
     { href: `/orgs/${org.id}/members`, label: "Members", exact: true },
   ];
 
@@ -58,7 +59,7 @@ export function OrgShell({ children }: { children: React.ReactNode }) {
           </div>
           <nav aria-label="Organization" className="flex gap-1 border-b border-border">
             {tabs.map((tab) => {
-              // Agents has nested pages (an agent, its editor); the others are single pages.
+              // Agents and Runs have nested pages (an agent, a run); the others are single pages.
               const active = tab.exact
                 ? pathname === tab.href
                 : pathname === tab.href || pathname.startsWith(`${tab.href}/`);

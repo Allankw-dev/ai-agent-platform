@@ -76,6 +76,22 @@ Gemini notes:
   limits**; a run that hits them fails with a clear message. Free-tier prompts may be used by
   Google to improve its products (`GEMINI_TIER=free`): use fake or public data only.
 
+## In the app
+
+- **Run an agent:** the agent's page has a "Run this agent" box (owners, admins and developers).
+  Starting a run opens its run page. Each attempt carries an `Idempotency-Key`, so a double click
+  or a retry of the same message never starts two runs; editing the message makes a new key.
+  Draft and active agents can run; a disabled agent says so instead of showing the box.
+- **Run page** (`/orgs/{org}/runs/{id}`): the message, the answer or the error, tokens, an
+  estimated cost, time taken, and a step-by-step timeline (every model call and tool call with
+  its input, output and failure). It refreshes itself every 2 seconds until the run finishes.
+  Managers can **Cancel** a running run or **Run again** a finished one.
+- **Runs tab** (`/orgs/{org}/runs`): all runs, newest first, filterable by agent and status. It
+  refreshes every 5 seconds while any listed run is still going.
+- **Cost:** shown as "Not estimated" when tokens were used but the server has no price for the
+  model (see Cost estimates), never as a misleading $0.
+- **Roles:** everyone can open runs; only owners, admins and developers can start or cancel them.
+
 ## Troubleshooting model calls
 
 A failed model call shows its reason in the run's `error` field and on the failed step:

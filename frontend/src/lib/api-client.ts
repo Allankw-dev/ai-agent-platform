@@ -17,6 +17,8 @@ type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   query?: Record<string, string | number | undefined>;
+  /** Extra request headers, e.g. `Idempotency-Key`. They cannot replace Authorization. */
+  headers?: Record<string, string>;
   signal?: AbortSignal;
 };
 
@@ -41,6 +43,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
       signal: options.signal,
       cache: "no-store",
       headers: {
+        ...options.headers,
         Authorization: `Bearer ${token}`,
         ...(options.body === undefined ? {} : { "Content-Type": "application/json" }),
       },

@@ -43,10 +43,11 @@ def provider_ready(provider: LLMProvider) -> bool:
     return False
 
 
-def run_read(run: AgentRun, version_number: int) -> RunRead:
+def run_read(run: AgentRun, version_number: int, agent_name: str) -> RunRead:
     return RunRead(
         id=run.id,
         agent_id=run.agent_id,
+        agent_name=agent_name,
         agent_version_id=run.agent_version_id,
         agent_version=version_number,
         status=run.status,
@@ -85,9 +86,11 @@ async def get_run_detail(session: AsyncSession, ctx: OrgContext, run_id: uuid.UU
     run = await run_repo.get(session, ctx.org_id, run_id)
     if run is None:
         raise ApiError(404, "run_not_found", "Run not found.")
-    number = await run_repo.version_number(session, run.agent_version_id)
+    number, agent_name = await run_repo.labels(session, run)
     steps = await run_repo.list_steps(session, run.id)
-    return RunDetail(**run_read(run, number).model_dump(), steps=[step_read(s) for s in steps])
+    return RunDetail(
+        **run_read(run, number, agent_name).model_dump(), steps=[step_read(s) for s in steps]
+    )
 
 
 async def create_run(
@@ -173,8 +176,8 @@ async def create_run(
         await session.commit()
         raise ApiError(503, "queue_unavailable", "The run could not be queued. Try again.") from exc
 
-    number = await run_repo.version_number(session, run.agent_version_id)
-    return run_read(run, number), True
+    number, agent_name = await run_repo.labels(session, run)
+    return run_read(run, number, agent_name), True
 
 
 async def _existing(session: AsyncSession, run: AgentRun, agent_id: uuid.UUID) -> RunRead:
@@ -182,7 +185,8 @@ async def _existing(session: AsyncSession, run: AgentRun, agent_id: uuid.UUID) -
         raise ApiError(
             409, "idempotency_key_reused", "That Idempotency-Key was used for a different agent."
         )
-    return run_read(run, await run_repo.version_number(session, run.agent_version_id))
+    number, agent_name = await run_repo.labels(session, run)
+    return run_read(run, number, agent_name)
 
 
 async def cancel_run(session: AsyncSession, ctx: OrgContext, run_id: uuid.UUID) -> RunRead:
@@ -201,4 +205,5 @@ async def cancel_run(session: AsyncSession, ctx: OrgContext, run_id: uuid.UUID) 
     )
     await session.commit()
     await session.refresh(run)
-    return run_read(run, await run_repo.version_number(session, run.agent_version_id))
+    number, agent_name = await run_repo.labels(session, run)
+    return run_read(run, number, agent_name)

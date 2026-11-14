@@ -39,6 +39,7 @@ async def test_starting_a_run_queues_it_for_the_worker(workspace: Workspace, que
     assert run["trigger"] == "manual"
     assert run["agent_id"] == agent_id
     assert run["agent_version"] == 1
+    assert run["agent_name"] == "Helper"
     assert run["input"] == {"message": "Summarize my inbox"}
     assert (run["input_tokens"], run["output_tokens"], run["cost_usd"]) == (0, 0, 0)
     assert run["started_at"] is None and run["finished_at"] is None
@@ -313,3 +314,15 @@ async def test_starting_and_cancelling_are_audited(workspace: Workspace) -> None
         r=run_id,
     )
     assert actions == "run.cancelled,run.created"
+
+
+async def test_runs_carry_the_agent_name_even_after_the_agent_is_deleted(
+    workspace: Workspace,
+) -> None:
+    agent_id = await workspace.create_agent(name="Short-lived bot")
+    run_id = await workspace.new_run(agent_id)
+    await workspace.api.delete(DEV, f"{workspace.base}/agents/{agent_id}")
+
+    listed = (await workspace.api.get(MEMBER, f"{workspace.base}/runs")).json()
+    assert [r["agent_name"] for r in listed["items"]] == ["Short-lived bot"]
+    assert (await workspace.detail(run_id))["agent_name"] == "Short-lived bot"

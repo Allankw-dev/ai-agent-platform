@@ -11,6 +11,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { AgentStatusBadge } from "@/features/agents/agent-status-badge";
 import { ConfigSummary } from "@/features/agents/config-summary";
 import { VersionHistory } from "@/features/agents/version-history";
+import { RunAgentBox } from "@/features/runs/run-agent-box";
 import { useCurrentOrg } from "@/features/orgs/org-context";
 import { ApiError } from "@/lib/api-client";
 import { useAgent, useDeleteAgent, useDuplicateAgent, useUpdateAgent } from "@/lib/api/queries";
@@ -132,6 +133,20 @@ export function AgentDetailPage() {
       </div>
 
       <ErrorNotice error={update.error ?? duplicate.error ?? remove.error} />
+
+      <RunAgentBox
+        agentId={data.id}
+        status={data.status}
+        version={data.current_version?.version ?? null}
+      />
+      <p className="text-sm">
+        <Link
+          href={`/orgs/${org.id}/runs?agent=${data.id}`}
+          className="text-accent hover:underline"
+        >
+          See this agent&apos;s runs
+        </Link>
+      </p>
 
       <Card>
         <CardHeader>

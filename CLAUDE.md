@@ -51,6 +51,6 @@ Frontend (in `frontend/`, Node 22, Next.js 16 with Cache Components enabled):
 - [x] Phase 1: Foundation (monorepo, API, worker, Docker, models, Alembic, CI, frontend shell)
 - [x] Phase 2: Identity and tenancy: [x] 2A token verification, [x] 2B row level security,
       [x] 2C organizations/roles/invitations, [x] 2D login/register pages and app shell
-- [ ] Phase 3: Agents and engine: [x] 3A agents and versions, [x] 3B engine (Gemini), [x] 3C runs API,
-      [ ] 3D frontend: [x] 3D-1 agent screens, [ ] 3D-2 run screens
+- [x] Phase 3: Agents and engine: [x] 3A agents and versions, [x] 3B engine (Gemini), [x] 3C runs API,
+      [x] 3D frontend (agent screens, run screens)
 - [ ] Phase 4: Tools and approvals (MVP)

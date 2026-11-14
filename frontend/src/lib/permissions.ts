@@ -34,3 +34,7 @@ export const invitableRoles = (actor: OrgRole): OrgRole[] =>
 /** Create, edit, version, roll back, duplicate, enable/disable and delete agents. */
 export const canManageAgents = (role: OrgRole) =>
   role === "owner" || role === "admin" || role === "developer";
+
+/** Start and cancel runs (everyone in the organization can view them). */
+export const canRunAgents = (role: OrgRole) =>
+  role === "owner" || role === "admin" || role === "developer";

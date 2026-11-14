@@ -16,6 +16,9 @@ import type {
   OrgRole,
   Organization,
   Page,
+  RunDetail,
+  RunRead,
+  RunStatus,
   ToolInfo,
   UserProfile,
   VersionRead,
@@ -36,7 +39,12 @@ export const keys = {
     ["agent-versions", orgId, agentId, limit] as const,
   version: (orgId: string, agentId: string, number: number) =>
     ["agent-version", orgId, agentId, number] as const,
+  runs: (orgId: string) => ["runs", orgId] as const,
+  runList: (orgId: string, filters: RunFilters) => ["runs", orgId, filters] as const,
+  run: (orgId: string, runId: string) => ["run", orgId, runId] as const,
 };
+
+export type RunFilters = { agentId?: string; status?: RunStatus; limit: number };
 
 export type AgentFilters = { status?: AgentStatus; q?: string; limit: number };
 
@@ -327,6 +335,70 @@ export function useRollbackAgent(orgId: string, agentId: string) {
         client.invalidateQueries({ queryKey: keys.agents(orgId) }),
         client.invalidateQueries({ queryKey: keys.agent(orgId, agentId) }),
         client.invalidateQueries({ queryKey: ["agent-versions", orgId, agentId] }),
+      ]);
+    },
+  });
+}
+
+// ---------- runs ----------
+
+const ACTIVE: RunStatus[] = ["queued", "running", "awaiting_approval"];
+/** A run that is still going: it will change without anyone touching it. */
+export const isActiveRun = (status: RunStatus | undefined) =>
+  status !== undefined && ACTIVE.includes(status);
+
+export const RUN_POLL_MS = 2_000;
+const LIST_POLL_MS = 5_000;
+
+export function useRuns(orgId: string, filters: RunFilters) {
+  const enabled = useEnabled();
+  return useQuery({
+    queryKey: keys.runList(orgId, filters),
+    queryFn: () =>
+      apiFetch<Page<RunRead>>(`/organizations/${orgId}/runs`, {
+        query: { limit: filters.limit, agent_id: filters.agentId, status: filters.status },
+      }),
+    enabled,
+    // Keep the list fresh while anything on it is still running.
+    refetchInterval: (query) =>
+      query.state.data?.items.some((run) => isActiveRun(run.status)) ? LIST_POLL_MS : false,
+  });
+}
+
+/** One run with its steps. Re-checks every couple of seconds until the run has finished. */
+export function useRun(orgId: string, runId: string) {
+  const enabled = useEnabled();
+  return useQuery({
+    queryKey: keys.run(orgId, runId),
+    queryFn: () => apiFetch<RunDetail>(`/organizations/${orgId}/runs/${runId}`),
+    enabled,
+    refetchInterval: (query) => (isActiveRun(query.state.data?.status) ? RUN_POLL_MS : false),
+  });
+}
+
+/** `idempotencyKey` makes a double click return the same run instead of starting two. */
+export function useStartRun(orgId: string, agentId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { message: string; idempotencyKey: string }) =>
+      apiFetch<RunRead>(`/organizations/${orgId}/agents/${agentId}/runs`, {
+        method: "POST",
+        body: { message: input.message },
+        headers: { "Idempotency-Key": input.idempotencyKey },
+      }),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.runs(orgId) }),
+  });
+}
+
+export function useCancelRun(orgId: string, runId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<RunRead>(`/organizations/${orgId}/runs/${runId}/cancel`, { method: "POST" }),
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: keys.run(orgId, runId) }),
+        client.invalidateQueries({ queryKey: keys.runs(orgId) }),
       ]);
     },
   });

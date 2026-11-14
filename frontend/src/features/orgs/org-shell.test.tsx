@@ -66,6 +66,16 @@ describe("OrgShell", () => {
     expect(screen.getByRole("link", { name: "Members" })).not.toHaveAttribute("aria-current");
   });
 
+  it("has a Runs tab that stays highlighted on a single run's page", async () => {
+    nav.pathname = "/orgs/org-1/runs/run-9";
+    routeApi({ "GET /organizations/org-1": ORG });
+    renderWithQuery(<OrgShell>x</OrgShell>);
+    const runs = await screen.findByRole("link", { name: "Runs" });
+    expect(runs).toHaveAttribute("href", "/orgs/org-1/runs");
+    expect(runs).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Agents" })).not.toHaveAttribute("aria-current");
+  });
+
   it("does not highlight Agents on other pages", async () => {
     routeApi({ "GET /organizations/org-1": ORG });
     renderWithQuery(<OrgShell>x</OrgShell>);

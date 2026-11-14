@@ -24,6 +24,7 @@ class RunCreate(BaseModel):
 class RunRead(BaseModel):
     id: uuid.UUID
     agent_id: uuid.UUID
+    agent_name: str
     agent_version_id: uuid.UUID
     agent_version: int
     status: RunStatus

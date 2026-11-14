@@ -5,6 +5,7 @@ import {
   canDeleteOrganization,
   canManage,
   canManageAgents,
+  canRunAgents,
   canManageMembers,
   canUpdateOrganization,
   invitableRoles,
@@ -63,5 +64,14 @@ describe("agent permissions (mirror of the API)", () => {
       expect(canManageAgents(role)).toBe(true);
     }
     expect(canManageAgents("member")).toBe(false);
+  });
+});
+
+describe("run permissions (mirror of the API)", () => {
+  it("owners, admins and developers start and cancel runs; members only view them", () => {
+    for (const role of ["owner", "admin", "developer"] as const) {
+      expect(canRunAgents(role)).toBe(true);
+    }
+    expect(canRunAgents("member")).toBe(false);
   });
 });

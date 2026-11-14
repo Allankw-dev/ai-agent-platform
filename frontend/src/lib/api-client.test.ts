@@ -41,6 +41,18 @@ describe("apiFetch", () => {
     expect(init.body).toBe('{"name":"Acme"}');
   });
 
+  it("sends extra headers but never lets them replace the bearer token", async () => {
+    fetchMock.mockResolvedValue(json({}));
+    await apiFetch("/x", {
+      method: "POST",
+      body: {},
+      headers: { "Idempotency-Key": "abc-123", Authorization: "Bearer attacker" },
+    });
+    const init = fetchMock.mock.calls[0][1];
+    expect(init.headers["Idempotency-Key"]).toBe("abc-123");
+    expect(init.headers.Authorization).toBe("Bearer test-token");
+  });
+
   it("builds a query string and skips undefined values", async () => {
     fetchMock.mockResolvedValue(json({}));
     await apiFetch("/x", { query: { limit: 10, offset: undefined } });

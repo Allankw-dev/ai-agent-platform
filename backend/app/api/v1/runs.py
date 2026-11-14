@@ -56,7 +56,7 @@ async def list_runs(
     rows, total = await run_repo.list_for_org(
         session, ctx.org_id, limit, offset, agent_id=agent_id, status=status
     )
-    items = [run_service.run_read(run, number) for run, number in rows]
+    items = [run_service.run_read(run, number, name) for run, number, name in rows]
     return Page(items=items, total=total, limit=limit, offset=offset)
 
 
