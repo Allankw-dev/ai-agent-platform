@@ -5,11 +5,12 @@ from collections.abc import Awaitable, Callable
 import structlog
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.context import OrgContext
 from app.core.config import get_settings
 from app.core.errors import ApiError
+from app.db.tenancy import use_tenant
 from app.models.enums import AgentStatus, LLMProvider, RunStatus, RunTrigger
 from app.models.runs import AgentRun, RunStep
 from app.repositories import agents as agent_repo
@@ -83,11 +84,13 @@ def step_read(step: RunStep) -> RunStepRead:
 
 
 async def reap_orphaned_runs(session: AsyncSession, ctx: OrgContext) -> None:
-    """Close runs whose worker died. Called whenever runs are read, so no run stays 'running'
-    forever, even if the worker is down and nothing else is looking."""
+    """Close orphaned runs on reads, without committing the request's transaction."""
     cutoff = run_repo.orphan_cutoff(get_settings().agent_timeout_ceiling_seconds)
-    if await run_repo.fail_orphaned(session, ctx.org_id, started_before=cutoff):
-        await session.commit()
+    maintenance_sessions = async_sessionmaker(bind=session.bind, expire_on_commit=False)
+    async with maintenance_sessions() as maintenance_session:
+        await use_tenant(maintenance_session, user_id=ctx.user.id, org_id=ctx.org_id)
+        if await run_repo.fail_orphaned(maintenance_session, ctx.org_id, started_before=cutoff):
+            await maintenance_session.commit()
 
 
 async def get_run_detail(session: AsyncSession, ctx: OrgContext, run_id: uuid.UUID) -> RunDetail:

@@ -123,11 +123,13 @@ ORPHANED_STEP = "The run stopped before this step finished."
 async def fail_orphaned(
     session: AsyncSession, org_id: uuid.UUID, *, started_before: datetime
 ) -> int:
-    """Fail runs still 'running' that started before `started_before`.
+    """Fail RUNNING runs that started before `started_before`.
 
     No live run can be that old (every run has a time limit, and the worker has a hard limit
     above it), so the worker that held it is gone. Their half-finished steps are failed too.
-    Only the given organization's runs are touched, so Row Level Security still applies.
+    AWAITING_APPROVAL runs are deliberately excluded because they are paused for human input,
+    not waiting on a worker. Only the given organization's runs are touched, so Row Level
+    Security still applies.
     """
     result = await session.execute(
         update(AgentRun)
@@ -136,7 +138,7 @@ async def fail_orphaned(
             AgentRun.status == RunStatus.RUNNING,
             AgentRun.started_at < started_before,
         )
-        .values(status=RunStatus.FAILED, error=ORPHANED_RUN, finished_at=datetime.now(UTC))
+        .values(status=RunStatus.FAILED, error=ORPHANED_RUN, finished_at=func.now())
         .returning(AgentRun.id)
     )
     run_ids = [row[0] for row in result]
@@ -144,7 +146,7 @@ async def fail_orphaned(
         await session.execute(
             update(RunStep)
             .where(RunStep.run_id.in_(run_ids), RunStep.status == StepStatus.RUNNING)
-            .values(status=StepStatus.FAILED, error=ORPHANED_STEP, finished_at=datetime.now(UTC))
+            .values(status=StepStatus.FAILED, error=ORPHANED_STEP, finished_at=func.now())
         )
     return len(run_ids)
 

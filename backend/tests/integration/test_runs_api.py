@@ -394,6 +394,21 @@ async def test_a_queued_run_is_never_failed_just_for_waiting(workspace: Workspac
     assert run["error"] is None
 
 
+async def test_a_run_waiting_for_approval_is_not_failed_as_an_orphan(
+    workspace: Workspace,
+) -> None:
+    run_id = await workspace.new_run(await workspace.create_agent())
+    workspace.api.execute(
+        "UPDATE agent_runs SET status = 'awaiting_approval', "
+        "started_at = now() - interval '2 days' WHERE id = :r",
+        r=run_id,
+    )
+
+    run = await workspace.detail(run_id)
+    assert run["status"] == "awaiting_approval"
+    assert run["finished_at"] is None
+
+
 async def test_the_cleanup_only_touches_the_callers_organization(workspace: Workspace) -> None:
     theirs_agent = await workspace.api.post(
         STRANGER,
