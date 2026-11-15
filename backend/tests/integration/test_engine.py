@@ -468,3 +468,24 @@ async def test_members_can_read_a_runs_steps(workspace: Workspace, runtime_maker
     await execute_run(uuid.UUID(run_id), uuid.UUID(workspace.org_id), maker=runtime_maker, llm=llm)
     run = await workspace.detail(run_id, who=MEMBER)
     assert [s["step_type"] for s in run["steps"]] == ["llm_call", "tool_call", "llm_call"]
+
+
+async def test_a_run_failed_by_the_cleanup_is_not_run_again_if_its_task_turns_up(
+    workspace: Workspace, runtime_maker: Maker
+) -> None:
+    """The queue can redeliver a task for a run that was already written off as orphaned."""
+    agent_id = await workspace.create_agent()
+    run_id = await workspace.new_run(agent_id)
+    workspace.api.execute(
+        "UPDATE agent_runs SET status = 'running', started_at = now() - interval '10 minutes' "
+        "WHERE id = :r",
+        r=run_id,
+    )
+    assert (await workspace.detail(run_id))["status"] == "failed"  # the cleanup runs on read
+
+    llm = ScriptedLLM(reply("should never run"))
+    await execute_run(uuid.UUID(run_id), uuid.UUID(workspace.org_id), maker=runtime_maker, llm=llm)
+    run = await workspace.detail(run_id)
+    assert run["status"] == "failed"
+    assert run["error"].startswith("The run stopped unexpectedly")
+    assert llm.calls == 0

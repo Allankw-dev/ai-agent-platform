@@ -82,7 +82,16 @@ def step_read(step: RunStep) -> RunStepRead:
     )
 
 
+async def reap_orphaned_runs(session: AsyncSession, ctx: OrgContext) -> None:
+    """Close runs whose worker died. Called whenever runs are read, so no run stays 'running'
+    forever, even if the worker is down and nothing else is looking."""
+    cutoff = run_repo.orphan_cutoff(get_settings().agent_timeout_ceiling_seconds)
+    if await run_repo.fail_orphaned(session, ctx.org_id, started_before=cutoff):
+        await session.commit()
+
+
 async def get_run_detail(session: AsyncSession, ctx: OrgContext, run_id: uuid.UUID) -> RunDetail:
+    await reap_orphaned_runs(session, ctx)
     run = await run_repo.get(session, ctx.org_id, run_id)
     if run is None:
         raise ApiError(404, "run_not_found", "Run not found.")

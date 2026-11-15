@@ -53,6 +53,7 @@ async def list_runs(
     agent_id: uuid.UUID | None = None,
     status: RunStatus | None = None,
 ) -> Page[RunRead]:
+    await run_service.reap_orphaned_runs(session, ctx)
     rows, total = await run_repo.list_for_org(
         session, ctx.org_id, limit, offset, agent_id=agent_id, status=status
     )

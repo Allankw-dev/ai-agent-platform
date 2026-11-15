@@ -33,3 +33,17 @@ export function newIdempotencyKey(): string {
   if (crypto && typeof crypto.randomUUID === "function") return crypto.randomUUID();
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
+
+/** How long ago something happened, in seconds (0 for an unparsable time). */
+export function secondsSince(iso: string, now: number = Date.now()): number {
+  const then = new Date(iso).getTime();
+  return Number.isNaN(then) ? 0 : Math.max(0, Math.floor((now - then) / 1_000));
+}
+
+/** "over a minute", "5 minutes", "2 hours": a rough wait, for messages to people. */
+export function formatWait(seconds: number): string {
+  if (seconds < 120) return "over a minute";
+  if (seconds < 3_600) return `${Math.floor(seconds / 60)} minutes`;
+  const hours = Math.floor(seconds / 3_600);
+  return hours === 1 ? "1 hour" : `${hours} hours`;
+}

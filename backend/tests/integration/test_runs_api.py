@@ -326,3 +326,96 @@ async def test_runs_carry_the_agent_name_even_after_the_agent_is_deleted(
     listed = (await workspace.api.get(MEMBER, f"{workspace.base}/runs")).json()
     assert [r["agent_name"] for r in listed["items"]] == ["Short-lived bot"]
     assert (await workspace.detail(run_id))["agent_name"] == "Short-lived bot"
+
+
+# ---------- runs orphaned by a dead worker ----------
+
+
+def make_running(ws: Workspace, run_id: str, seconds_ago: int) -> None:
+    ws.api.execute(
+        "UPDATE agent_runs SET status = 'running', "
+        "started_at = now() - make_interval(secs => :s) WHERE id = :r",
+        s=seconds_ago,
+        r=run_id,
+    )
+
+
+async def test_a_run_whose_worker_died_is_failed_instead_of_running_forever(
+    workspace: Workspace,
+) -> None:
+    run_id = await workspace.new_run(await workspace.create_agent())
+    make_running(workspace, run_id, seconds_ago=600)
+    workspace.api.execute(
+        "INSERT INTO run_steps (org_id, run_id, sequence, step_type, status) "
+        "VALUES (:o, :r, 0, 'llm_call', 'running')",
+        o=workspace.org_id,
+        r=run_id,
+    )
+
+    run = await workspace.detail(run_id)
+    assert run["status"] == "failed"
+    assert run["error"].startswith("The run stopped unexpectedly")
+    assert run["finished_at"] is not None
+    # A step that was mid-flight does not keep claiming to be running.
+    assert run["steps"][0]["status"] == "failed"
+    assert run["steps"][0]["error"] == "The run stopped before this step finished."
+    assert run["steps"][0]["finished_at"] is not None
+
+    cancel = await workspace.api.post(DEV, f"{workspace.base}/runs/{run_id}/cancel")
+    assert cancel.status_code == 409
+
+
+async def test_listing_runs_also_cleans_up_orphans(workspace: Workspace) -> None:
+    run_id = await workspace.new_run(await workspace.create_agent())
+    make_running(workspace, run_id, seconds_ago=900)
+    listing = (await workspace.api.get(MEMBER, f"{workspace.base}/runs")).json()
+    assert [r["status"] for r in listing["items"]] == ["failed"]
+
+
+async def test_a_run_inside_its_time_limit_is_left_alone(workspace: Workspace) -> None:
+    """The longest allowed run is 300 s; the cleanup waits 180 s more before it believes a run is dead."""
+    agent_id = await workspace.create_agent()
+    young = await workspace.new_run(agent_id)
+    old = await workspace.new_run(agent_id)
+    make_running(workspace, young, seconds_ago=360)
+    make_running(workspace, old, seconds_ago=540)
+    assert (await workspace.detail(young))["status"] == "running"
+    assert (await workspace.detail(old))["status"] == "failed"
+
+
+async def test_a_queued_run_is_never_failed_just_for_waiting(workspace: Workspace) -> None:
+    """Its task is still in the queue, and will run when a worker comes back."""
+    run_id = await workspace.new_run(await workspace.create_agent())
+    workspace.api.execute(
+        "UPDATE agent_runs SET created_at = now() - interval '2 days' WHERE id = :r", r=run_id
+    )
+    run = await workspace.detail(run_id)
+    assert run["status"] == "queued"
+    assert run["error"] is None
+
+
+async def test_the_cleanup_only_touches_the_callers_organization(workspace: Workspace) -> None:
+    theirs_agent = await workspace.api.post(
+        STRANGER,
+        f"/api/v1/organizations/{workspace.other_org_id}/agents",
+        json={"name": "Theirs", "config": agent_config()},
+    )
+    theirs = await workspace.api.post(
+        STRANGER,
+        f"/api/v1/organizations/{workspace.other_org_id}/agents/{theirs_agent.json()['id']}/runs",
+        json={"message": "hi"},
+    )
+    their_run = theirs.json()["id"]
+    make_running(workspace, their_run, seconds_ago=900)
+
+    # Reading our own runs must not reach into theirs...
+    await workspace.api.get(OWNER, f"{workspace.base}/runs")
+    assert (
+        workspace.api.scalar("SELECT status FROM agent_runs WHERE id = :r", r=their_run)
+        == "running"
+    )
+    # ...but reading theirs cleans theirs up.
+    listing = await workspace.api.get(
+        STRANGER, f"/api/v1/organizations/{workspace.other_org_id}/runs"
+    )
+    assert [r["status"] for r in listing.json()["items"]] == ["failed"]

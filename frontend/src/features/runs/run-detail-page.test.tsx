@@ -94,6 +94,33 @@ describe("RunDetailPage", () => {
     expect(screen.getByText("In progress")).toBeInTheDocument();
   });
 
+  it("warns when a queued run has been waiting a long time, and not before", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const queued = runDetail({
+      status: "queued",
+      output: null,
+      steps: [],
+      started_at: null,
+      finished_at: null,
+      created_at: "2026-11-13T09:00:00Z",
+    });
+    routeApi({ [`GET ${RUN}`]: queued });
+
+    vi.setSystemTime(new Date("2026-11-13T09:00:30Z"));
+    const first = renderRun();
+    await screen.findByText(/Waiting for a worker to pick this up/);
+    expect(screen.queryByText(/background worker may be stopped or busy/)).not.toBeInTheDocument();
+    first.unmount();
+
+    vi.setSystemTime(new Date("2026-11-13T09:05:00Z"));
+    renderRun();
+    expect(
+      await screen.findByText(
+        /This run has been waiting for 5 minutes\. The background worker may be stopped or busy/,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("updates by itself until the run has finished, then stops asking", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     let calls = 0;

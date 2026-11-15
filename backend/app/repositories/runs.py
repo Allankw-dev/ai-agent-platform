@@ -1,11 +1,11 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agents import Agent, AgentVersion
-from app.models.enums import RunStatus
+from app.models.enums import RunStatus, StepStatus
 from app.models.runs import AgentRun, RunStep
 
 OPEN_STATUSES = (RunStatus.QUEUED, RunStatus.RUNNING, RunStatus.AWAITING_APPROVAL)
@@ -111,3 +111,44 @@ async def cancel(session: AsyncSession, org_id: uuid.UUID, run_id: uuid.UUID) ->
         .returning(AgentRun.id)
     )
     return result.first() is not None
+
+
+ORPHANED_RUN = (
+    "The run stopped unexpectedly: the worker running it was shut down or restarted, "
+    "so it never finished."
+)
+ORPHANED_STEP = "The run stopped before this step finished."
+
+
+async def fail_orphaned(
+    session: AsyncSession, org_id: uuid.UUID, *, started_before: datetime
+) -> int:
+    """Fail runs still 'running' that started before `started_before`.
+
+    No live run can be that old (every run has a time limit, and the worker has a hard limit
+    above it), so the worker that held it is gone. Their half-finished steps are failed too.
+    Only the given organization's runs are touched, so Row Level Security still applies.
+    """
+    result = await session.execute(
+        update(AgentRun)
+        .where(
+            AgentRun.org_id == org_id,
+            AgentRun.status == RunStatus.RUNNING,
+            AgentRun.started_at < started_before,
+        )
+        .values(status=RunStatus.FAILED, error=ORPHANED_RUN, finished_at=datetime.now(UTC))
+        .returning(AgentRun.id)
+    )
+    run_ids = [row[0] for row in result]
+    if run_ids:
+        await session.execute(
+            update(RunStep)
+            .where(RunStep.run_id.in_(run_ids), RunStep.status == StepStatus.RUNNING)
+            .values(status=StepStatus.FAILED, error=ORPHANED_STEP, finished_at=datetime.now(UTC))
+        )
+    return len(run_ids)
+
+
+def orphan_cutoff(timeout_ceiling_seconds: int, now: datetime | None = None) -> datetime:
+    """Runs that started before this are dead: past the longest allowed run, plus a margin."""
+    return (now or datetime.now(UTC)) - timedelta(seconds=timeout_ceiling_seconds + 180)

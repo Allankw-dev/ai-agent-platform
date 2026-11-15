@@ -117,6 +117,16 @@ because retrying would only use up the run's time limit.
 - A task is acknowledged late and may be redelivered after a worker crash. A run found already
   `running` on redelivery is marked failed ("interrupted"), never run twice. Finished runs are
   skipped.
+- **Orphaned runs.** If a worker dies mid-run (Docker restarted, the machine slept), the run would
+  say "running" forever. Whenever runs are read (the list or a single run), any run that has been
+  "running" longer than the longest allowed run plus a 3 minute margin
+  (`AGENT_TIMEOUT_CEILING_SECONDS` + 180 s) is marked failed, and its unfinished steps with it. A
+  run still inside its time limit is never touched, and neither is a **queued** run: its task is
+  still in the queue and will run when a worker returns. The run page says so when a queued run has
+  waited over a minute.
+- **Restarts.** The compose services use `restart: unless-stopped`, so Docker brings the worker
+  (and everything else) back after an engine restart. A stopped worker with queued tasks was the
+  cause of a run stuck on "queued" during development.
 - A worker acts for an organization, not a user: it sets only `app.org_id`, so Row Level Security
   still isolates tenants. Asking for a run with the wrong organization finds nothing.
 

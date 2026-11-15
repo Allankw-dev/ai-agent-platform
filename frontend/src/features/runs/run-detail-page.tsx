@@ -14,7 +14,14 @@ import { StepTimeline } from "@/features/runs/step-timeline";
 import { ApiError } from "@/lib/api-client";
 import { isActiveRun, useCancelRun, useRun, useStartRun } from "@/lib/api/queries";
 import type { RunDetail } from "@/lib/api/types";
-import { formatCost, formatDateTime, formatDuration, newIdempotencyKey } from "@/lib/format";
+import {
+  formatCost,
+  formatDateTime,
+  formatDuration,
+  formatWait,
+  newIdempotencyKey,
+  secondsSince,
+} from "@/lib/format";
 import { canRunAgents } from "@/lib/permissions";
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
@@ -39,6 +46,13 @@ function Outcome({ run }: { run: RunDetail }) {
           }
         />
         <p className="text-xs text-muted-foreground">This page updates by itself.</p>
+        {run.status === "queued" && secondsSince(run.created_at) >= 60 && (
+          <Alert variant="info">
+            This run has been waiting for {formatWait(secondsSince(run.created_at))}. The background
+            worker may be stopped or busy. It will start as soon as a worker is free, or you can
+            cancel it and try again.
+          </Alert>
+        )}
       </div>
     );
   }

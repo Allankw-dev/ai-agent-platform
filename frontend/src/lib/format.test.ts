@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { formatCost, formatDateTime, formatDuration, newIdempotencyKey } from "@/lib/format";
+import {
+  formatCost,
+  formatDateTime,
+  formatDuration,
+  formatWait,
+  newIdempotencyKey,
+  secondsSince,
+} from "@/lib/format";
 
 describe("formatDuration", () => {
   const at = (seconds: number) =>
@@ -65,5 +72,26 @@ describe("newIdempotencyKey", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe("secondsSince and formatWait", () => {
+  const now = Date.UTC(2026, 10, 13, 9, 10, 0);
+
+  it("counts whole seconds and never goes negative", () => {
+    expect(secondsSince("2026-11-13T09:09:30Z", now)).toBe(30);
+    expect(secondsSince("2026-11-13T09:20:00Z", now)).toBe(0);
+    expect(secondsSince("not a time", now)).toBe(0);
+  });
+
+  it.each([
+    [60, "over a minute"],
+    [119, "over a minute"],
+    [120, "2 minutes"],
+    [900, "15 minutes"],
+    [3_600, "1 hour"],
+    [7_300, "2 hours"],
+  ])("%s seconds reads as %s", (seconds, text) => {
+    expect(formatWait(seconds)).toBe(text);
   });
 });

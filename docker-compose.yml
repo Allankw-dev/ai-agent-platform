@@ -1,5 +1,8 @@
 services:
+  # `restart: unless-stopped` brings every service back after Docker Desktop or the engine
+  # restarts, so a queued run is never left waiting for a worker that nobody restarted.
   db:
+    restart: unless-stopped
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: app
@@ -17,6 +20,7 @@ services:
       retries: 10
 
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
     ports:
       - "6379:6379"
@@ -27,6 +31,7 @@ services:
       retries: 10
 
   api:
+    restart: unless-stopped
     build: ./backend
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     env_file:
@@ -57,6 +62,7 @@ services:
       retries: 5
 
   worker:
+    restart: unless-stopped
     build: ./backend
     # Celery starts one process per CPU by default (16 on many laptops). Each one loads the whole
     # engine (about 100 MB), which can exhaust Docker's memory. Two is plenty for local development.
@@ -77,6 +83,7 @@ services:
         condition: service_healthy
 
   frontend:
+    restart: unless-stopped
     build: ./frontend
     environment:
       # Read by the browser, so it must be a URL the browser can reach (not the Docker hostname).
