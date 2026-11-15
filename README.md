@@ -25,6 +25,8 @@ docker compose exec api alembic upgrade head
 
 - Web: http://localhost:3000 (create an account at /register; status page at /status)
 - API docs: http://localhost:8000/api/docs
+- Ports in use by another program? Set `WEB_PORT`, `API_PORT`, `DB_PORT` or `REDIS_PORT` in `.env`
+  (see `.env.example`) and run `docker compose up -d`. The links above then use your port.
 - Tests: `docker compose exec api pytest`
 
 ## Status

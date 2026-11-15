@@ -13,7 +13,6 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$api = "http://localhost:8000/api/v1"
 
 # --- read .env (same approach as dev-login.ps1) ---
 $envFile = Join-Path $PSScriptRoot "..\.env"
@@ -23,6 +22,11 @@ Get-Content $envFile | ForEach-Object {
         $settings[$matches[1]] = $matches[2].Trim('"')
     }
 }
+# Ports follow .env (WEB_PORT / API_PORT), with the usual defaults.
+$apiPort = if ($settings["API_PORT"]) { $settings["API_PORT"] } else { "8000" }
+$webPort = if ($settings["WEB_PORT"]) { $settings["WEB_PORT"] } else { "3000" }
+$api = "http://localhost:$apiPort/api/v1"
+
 $url = $settings["NEXT_PUBLIC_SUPABASE_URL"]
 $key = $settings["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"]
 if (-not $url -or -not $key) {
@@ -68,7 +72,7 @@ Write-Host "1. Signed in." -ForegroundColor Green
 # --- 2. pick the organization ---
 $orgs = Invoke-Api -Method Get -Path "/organizations"
 if ($orgs.items.Count -eq 0) {
-    throw "You are not in any organization yet. Create one at http://localhost:3000/orgs/new first."
+    throw "You are not in any organization yet. Create one at http://localhost:$webPort/orgs/new first."
 }
 $org = $orgs.items[0]
 if ($org.role -eq "member") {

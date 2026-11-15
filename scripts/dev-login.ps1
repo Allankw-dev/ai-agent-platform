@@ -13,6 +13,8 @@ Get-Content $envFile | ForEach-Object {
     }
 }
 
+$apiPort = if ($settings["API_PORT"]) { $settings["API_PORT"] } else { "8000" }
+
 $url = $settings["NEXT_PUBLIC_SUPABASE_URL"]
 $key = $settings["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"]
 if (-not $url -or -not $key) {
@@ -33,4 +35,4 @@ if ($Action -eq "signup") {
 }
 
 $session = Invoke-RestMethod -Method Post -Uri "$url/auth/v1/token?grant_type=password" -Headers $headers -ContentType "application/json" -Body $body
-Invoke-RestMethod -Uri "http://localhost:8000/api/v1/auth/me" -Headers @{ Authorization = "Bearer $($session.access_token)" }
+Invoke-RestMethod -Uri "http://localhost:$apiPort/api/v1/auth/me" -Headers @{ Authorization = "Bearer $($session.access_token)" }

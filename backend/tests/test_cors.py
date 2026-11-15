@@ -5,12 +5,13 @@ methods and headers are allowed. A header missing from the answer makes the brow
 request, which the app reports as "Could not reach the server".
 """
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.main import app
+from app.core.config import get_settings
+from app.main import app, create_app
 
 ORIGIN = "http://localhost:3000"
 
@@ -65,3 +66,50 @@ async def test_other_websites_are_refused(client: AsyncClient) -> None:
     )
     assert response.status_code == 400
     assert "access-control-allow-origin" not in response.headers
+
+
+# ---------- a different WEB_PORT ----------
+
+
+@pytest.fixture
+def web_on_port_3001(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """What docker-compose passes to the API when WEB_PORT=3001 is set in .env."""
+    monkeypatch.setenv("CORS_ORIGINS", '["http://localhost:3001"]')
+    monkeypatch.setenv("FRONTEND_URL", "http://localhost:3001")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+def test_the_web_port_setting_reaches_the_api_settings(web_on_port_3001: None) -> None:
+    settings = get_settings()
+    assert settings.cors_origins == ["http://localhost:3001"]
+    assert settings.frontend_url == "http://localhost:3001"
+
+
+async def test_the_api_accepts_the_website_on_the_new_port_and_not_the_old_one(
+    web_on_port_3001: None,
+) -> None:
+    async with AsyncClient(transport=ASGITransport(app=create_app()), base_url="http://test") as c:
+        allowed = await c.options(
+            "/api/v1/organizations",
+            headers=preflight(
+                "POST", "authorization,idempotency-key", origin="http://localhost:3001"
+            ),
+        )
+        refused = await c.options(
+            "/api/v1/organizations",
+            headers=preflight(
+                "POST", "authorization,idempotency-key", origin="http://localhost:3000"
+            ),
+        )
+    assert allowed.status_code == 200
+    assert allowed.headers["access-control-allow-origin"] == "http://localhost:3001"
+    assert refused.status_code == 400
+
+
+def test_invitation_links_use_the_configured_website(web_on_port_3001: None) -> None:
+    assert (
+        get_settings().frontend_url.rstrip("/") + "/invite/abc"
+        == "http://localhost:3001/invite/abc"
+    )

@@ -16,7 +16,7 @@ and `docs/er-diagram.md`.
 - Develop in Linux/WSL2 or Docker. Docker Compose runs the stack.
 
 ## Commands
-Stack: `cp .env.example .env` then `docker compose up --build` (API :8000, web :3000).
+Stack: `cp .env.example .env` then `docker compose up --build` (API :8000, web :3000; both changeable with `API_PORT` / `WEB_PORT` in `.env`).
 
 Backend (in `backend/`, Python 3.12 pinned, managed by uv):
 - `uv sync`, `uv run ruff check .`, `uv run ruff format .`, `uv run mypy app tests`

@@ -25,7 +25,9 @@ which prevents open redirects.
 ## Supabase dashboard settings
 
 - **Authentication > URL Configuration**: Site URL `http://localhost:3000` and the redirect URL
-  `http://localhost:3000/**` (add your production URL when you deploy).
+  `http://localhost:3000/**` (add your production URL when you deploy). If you change `WEB_PORT` in
+  `.env`, add `http://localhost:<your port>/**` here too, or links in Supabase's emails (confirm,
+  reset password) will point at the old port. Signing in with a password works either way.
 - Keep **email confirmation** on. Confirmation and reset links must be opened in the same browser
   that requested them (the PKCE verifier is stored there).
 - Supabase's built-in email sender is rate limited and meant for development. Configure your own

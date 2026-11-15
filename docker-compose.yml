@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: app
       POSTGRES_DB: agentplatform
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infrastructure/docker/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
@@ -23,7 +23,7 @@ services:
     restart: unless-stopped
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -43,8 +43,11 @@ services:
       REDIS_URL: redis://redis:6379/0
       # Windows bind mounts do not deliver file events reliably; polling avoids a reloader crash.
       WATCHFILES_FORCE_POLLING: "true"
+      # The website the browser loads, so the API accepts its requests and builds correct invite links.
+      CORS_ORIGINS: '["http://localhost:${WEB_PORT:-3000}"]'
+      FRONTEND_URL: http://localhost:${WEB_PORT:-3000}
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     volumes:
       - ./backend/app:/app/app
       - ./backend/tests:/app/tests
@@ -87,13 +90,13 @@ services:
     build: ./frontend
     environment:
       # Read by the browser, so it must be a URL the browser can reach (not the Docker hostname).
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: http://localhost:${API_PORT:-8000}
       # From your .env (Compose reads it automatically). Both are safe to expose to the browser.
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
       WATCHPACK_POLLING: "true"
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3000}:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
