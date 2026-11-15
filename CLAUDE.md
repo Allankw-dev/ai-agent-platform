@@ -53,4 +53,5 @@ Frontend (in `frontend/`, Node 22, Next.js 16 with Cache Components enabled):
       [x] 2C organizations/roles/invitations, [x] 2D login/register pages and app shell
 - [x] Phase 3: Agents and engine: [x] 3A agents and versions, [x] 3B engine (Gemini), [x] 3C runs API,
       [x] 3D frontend (agent screens, run screens)
-- [ ] Phase 4: Tools and approvals (MVP)
+- [ ] Phase 4: Tools and approvals (MVP). Design in `docs/phase4-design.md`, awaiting approval;
+      4A vault, 4B HTTP tools, 4C Slack, 4D approvals backend, 4E approvals screens, 4F acceptance
