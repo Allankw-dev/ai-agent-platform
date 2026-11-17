@@ -16,16 +16,7 @@ Output tokens include any hidden "thinking" tokens, because providers bill them 
 
 from decimal import ROUND_HALF_UP, Decimal
 
-from pydantic import BaseModel
-
-
-class ModelPrice(BaseModel):
-    input_per_mtok: Decimal
-    output_per_mtok: Decimal
-    # Some models charge more once a single prompt passes a size threshold.
-    long_input_per_mtok: Decimal | None = None
-    long_output_per_mtok: Decimal | None = None
-    long_prompt_tokens: int = 200_000
+from app.core.model_price import ModelPrice
 
 
 def cost_micro_usd(

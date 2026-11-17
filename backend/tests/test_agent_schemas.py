@@ -13,7 +13,7 @@ def test_a_minimal_configuration_gets_safe_defaults() -> None:
     assert config.limits.timeout_seconds == 120
     assert config.limits.max_total_tokens == 50_000
     assert config.limits.cost_budget_usd is None
-    assert config.memory_config.conversation_memory is True
+    assert config.memory_config.conversation_memory is False
     assert config.tools == []
 
 

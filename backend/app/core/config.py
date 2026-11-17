@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.engine.pricing import ModelPrice
+from app.core.model_price import ModelPrice
 
 
 class Settings(BaseSettings):

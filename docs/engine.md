@@ -40,7 +40,9 @@ applied again when a run starts, so lowering one also constrains older versions.
 
 - Iterations, tokens and cost are checked **before each model call**, so a run can overshoot a
   token or cost limit by at most one call.
-- The timeout wraps the whole run, including a model call that hangs.
+- The timeout wraps the whole run, including a model call that hangs. A run that fails mid-step (the
+  time limit, a crash, an interrupted redelivery) also closes that step as failed, so no step is
+  left showing "running" on a finished run.
 - Cancelling a run (`POST .../runs/{id}/cancel`) is noticed before the next model call.
 
 A run that stops on a limit is `failed` with a message saying which limit, and keeps the last text

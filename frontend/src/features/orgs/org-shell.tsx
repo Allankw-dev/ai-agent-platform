@@ -11,7 +11,7 @@ import { ErrorNotice } from "@/components/error-notice";
 import { OrgProvider } from "@/features/orgs/org-context";
 import { ApiError } from "@/lib/api-client";
 import { useOrganization } from "@/lib/api/queries";
-import { ROLE_LABELS } from "@/lib/permissions";
+import { ROLE_LABELS, canViewIntegrations } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 
 export function OrgShell({ children }: { children: React.ReactNode }) {
@@ -44,6 +44,9 @@ export function OrgShell({ children }: { children: React.ReactNode }) {
     { href: `/orgs/${org.id}`, label: "Overview", exact: true },
     { href: `/orgs/${org.id}/agents`, label: "Agents", exact: false },
     { href: `/orgs/${org.id}/runs`, label: "Runs", exact: false },
+    ...(canViewIntegrations(org.role)
+      ? [{ href: `/orgs/${org.id}/integrations`, label: "Integrations", exact: false }]
+      : []),
     { href: `/orgs/${org.id}/members`, label: "Members", exact: true },
   ];
 

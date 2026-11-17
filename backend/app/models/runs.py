@@ -41,8 +41,6 @@ class AgentRun(UUIDPrimaryKeyMixin, TenantMixin, Base):
     input: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     output: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     error: Mapped[str | None] = mapped_column(Text)
-    # Links the run to its persisted LangGraph checkpoint (used to resume after approval).
-    thread_id: Mapped[str | None] = mapped_column(String(100))
     idempotency_key: Mapped[str | None] = mapped_column(String(200))
     input_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     output_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))

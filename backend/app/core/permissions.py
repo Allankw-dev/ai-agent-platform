@@ -25,6 +25,8 @@ class Permission(enum.StrEnum):
     AGENTS_MANAGE = "agents:manage"  # create, edit, version, roll back, duplicate, enable, delete
     RUNS_VIEW = "runs:view"
     RUNS_CREATE = "runs:create"  # start and cancel runs
+    INTEGRATIONS_VIEW = "integrations:view"  # list integrations (never their secrets)
+    INTEGRATIONS_MANAGE = "integrations:manage"  # add, edit, delete; save or remove a secret
 
 
 _ALL = frozenset(OrgRole)
@@ -38,6 +40,10 @@ GRANTS: dict[Permission, frozenset[OrgRole]] = {
     Permission.AGENTS_MANAGE: frozenset({OrgRole.OWNER, OrgRole.ADMIN, OrgRole.DEVELOPER}),
     Permission.RUNS_VIEW: _ALL,
     Permission.RUNS_CREATE: frozenset({OrgRole.OWNER, OrgRole.ADMIN, OrgRole.DEVELOPER}),
+    # Developers can see which integrations exist (to pick one for an agent's tool) but cannot
+    # change them or their secrets. Members cannot see them at all.
+    Permission.INTEGRATIONS_VIEW: frozenset({OrgRole.OWNER, OrgRole.ADMIN, OrgRole.DEVELOPER}),
+    Permission.INTEGRATIONS_MANAGE: frozenset({OrgRole.OWNER, OrgRole.ADMIN}),
 }
 
 

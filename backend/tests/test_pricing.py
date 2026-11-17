@@ -1,6 +1,7 @@
 from decimal import Decimal
 
-from app.engine.pricing import ModelPrice, cost_micro_usd, micro_to_usd
+from app.core.model_price import ModelPrice
+from app.engine.pricing import cost_micro_usd, micro_to_usd
 
 PRICES = {
     "cheap": ModelPrice(input_per_mtok=Decimal("0.10"), output_per_mtok=Decimal("0.50")),

@@ -108,7 +108,7 @@ describe("toAgentConfig", () => {
       system_instructions: "You help with maths.",
       objectives: null,
       model_params: { max_output_tokens: 2048 },
-      memory_config: { conversation_memory: true, max_history_messages: 20 },
+      memory_config: { conversation_memory: false, max_history_messages: 20 },
       limits: {
         max_iterations: 7,
         timeout_seconds: 120,
@@ -170,7 +170,7 @@ describe("valuesFromAgent", () => {
     const values = valuesFromAgent(old);
     expect(values.maxIterations).toBe("10");
     expect(values.maxOutputTokens).toBe("");
-    expect(values.memory).toEqual({ conversation_memory: true, max_history_messages: 20 });
+    expect(values.memory).toEqual({ conversation_memory: false, max_history_messages: 20 });
   });
 
   it("copes with an agent that has no version", () => {

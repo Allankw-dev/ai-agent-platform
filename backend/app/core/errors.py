@@ -47,10 +47,18 @@ async def http_exception_handler(_: Request, exc: StarletteHTTPException) -> JSO
     )
 
 
-async def validation_error_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+def _without_input(errors: list[Any]) -> list[Any]:
+    """Drop the submitted value from each error: FastAPI echoes it back as `input`."""
+    return [{key: value for key, value in error.items() if key != "input"} for error in errors]
+
+
+async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    errors = jsonable_encoder(exc.errors())
+    if request.url.path.endswith("/credential"):
+        # The body of this request is a secret. An error must never repeat it, not even a
+        # rejected one (too long, wrong type, extra field).
+        errors = _without_input(errors)
     return JSONResponse(
         status_code=422,
-        content=_body(
-            "validation_error", "The request is invalid.", jsonable_encoder(exc.errors())
-        ),
+        content=_body("validation_error", "The request is invalid.", errors),
     )

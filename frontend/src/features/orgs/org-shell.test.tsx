@@ -108,4 +108,26 @@ describe("OrgShell", () => {
     renderWithQuery(<OrgShell>x</OrgShell>);
     expect(await screen.findByText("The server had a problem.")).toBeInTheDocument();
   });
+
+  it("has an Integrations tab for roles that may see integrations, highlighted on its page", async () => {
+    nav.pathname = "/orgs/org-1/integrations";
+    routeApi({ "GET /organizations/org-1": ORG });
+    renderWithQuery(<OrgShell>x</OrgShell>);
+    const tab = await screen.findByRole("link", { name: "Integrations" });
+    expect(tab).toHaveAttribute("href", "/orgs/org-1/integrations");
+    expect(tab).toHaveAttribute("aria-current", "page");
+  });
+
+  it.each(["owner", "developer"])("shows the Integrations tab to a %s", async (role) => {
+    routeApi({ "GET /organizations/org-1": { ...ORG, role } });
+    renderWithQuery(<OrgShell>x</OrgShell>);
+    expect(await screen.findByRole("link", { name: "Integrations" })).toBeInTheDocument();
+  });
+
+  it("hides the Integrations tab from members", async () => {
+    routeApi({ "GET /organizations/org-1": { ...ORG, role: "member" } });
+    renderWithQuery(<OrgShell>x</OrgShell>);
+    await screen.findByRole("link", { name: "Members" });
+    expect(screen.queryByRole("link", { name: "Integrations" })).not.toBeInTheDocument();
+  });
 });

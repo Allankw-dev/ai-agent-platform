@@ -120,6 +120,21 @@ ORPHANED_RUN = (
 ORPHANED_STEP = "The run stopped before this step finished."
 
 
+async def fail_running_steps(session: AsyncSession, run_ids: list[uuid.UUID]) -> None:
+    """Close the half-finished steps of runs that have ended, so none stays 'running' forever.
+
+    A step is still 'running' when its run ended mid-step: the time limit cut a model call off,
+    or the worker died. Only steps of the given runs are touched.
+    """
+    if not run_ids:
+        return
+    await session.execute(
+        update(RunStep)
+        .where(RunStep.run_id.in_(run_ids), RunStep.status == StepStatus.RUNNING)
+        .values(status=StepStatus.FAILED, error=ORPHANED_STEP, finished_at=func.now())
+    )
+
+
 async def fail_orphaned(
     session: AsyncSession, org_id: uuid.UUID, *, started_before: datetime
 ) -> int:
@@ -142,12 +157,7 @@ async def fail_orphaned(
         .returning(AgentRun.id)
     )
     run_ids = [row[0] for row in result]
-    if run_ids:
-        await session.execute(
-            update(RunStep)
-            .where(RunStep.run_id.in_(run_ids), RunStep.status == StepStatus.RUNNING)
-            .values(status=StepStatus.FAILED, error=ORPHANED_STEP, finished_at=func.now())
-        )
+    await fail_running_steps(session, run_ids)
     return len(run_ids)
 
 

@@ -38,6 +38,9 @@ Frontend (in `frontend/`, Node 22, Next.js 16 with Cache Components enabled):
 - No logic in `main.py`. Routers -> services -> repositories.
 - Never trust model-generated tool arguments; validate against the tool schema.
 - No secrets in code. Config via environment only. Never commit `.env`.
+- Stored secrets (integration credentials) are write-only: only `app/services/credentials.py`
+  decrypts them, no response, log, audit entry or run step may contain one, and tool output goes
+  through `redact_secret` first (see `docs/credentials.md`; tests enforce the structure).
 - Tenant data is only touched through a session that called `use_tenant(...)` (see
   `docs/tenancy.md`). Never connect as the owner/superuser for request handling.
 - Every tenant table has `org_id`. Every change to a model needs a migration (CI enforces it).
@@ -53,5 +56,7 @@ Frontend (in `frontend/`, Node 22, Next.js 16 with Cache Components enabled):
       [x] 2C organizations/roles/invitations, [x] 2D login/register pages and app shell
 - [x] Phase 3: Agents and engine: [x] 3A agents and versions, [x] 3B engine (Gemini), [x] 3C runs API,
       [x] 3D frontend (agent screens, run screens)
-- [ ] Phase 4: Tools and approvals (MVP). Design in `docs/phase4-design.md`, awaiting approval;
-      4A vault, 4B HTTP tools, 4C Slack, 4D approvals backend, 4E approvals screens, 4F acceptance
+- [ ] Phase 4: Tools and approvals (MVP). Design in `docs/phase4-design.md`, approved (all seven
+      decisions accepted as recommended). [x] 4A vault and Integrations tab (built, awaiting
+      acceptance), [ ] 4B HTTP tools, [ ] 4C Slack, [ ] 4D approvals backend, [ ] 4E approvals
+      screens, [ ] 4F acceptance

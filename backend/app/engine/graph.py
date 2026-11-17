@@ -22,6 +22,7 @@ from typing import Any, TypedDict
 import structlog
 from langgraph.graph import END, START, StateGraph
 
+from app.core.model_price import ModelPrice
 from app.engine.limits import EffectiveLimits
 from app.engine.llm import (
     FinishReason,
@@ -32,7 +33,7 @@ from app.engine.llm import (
     tool_message,
     user_message,
 )
-from app.engine.pricing import ModelPrice, cost_micro_usd
+from app.engine.pricing import cost_micro_usd
 from app.engine.recorder import MAX_TEXT_CHARS, RunRecorder, scrub
 from app.models.enums import StepStatus, StepType
 from app.tools import get_handler

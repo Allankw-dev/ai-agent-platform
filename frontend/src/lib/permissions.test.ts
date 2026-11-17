@@ -5,9 +5,11 @@ import {
   canDeleteOrganization,
   canManage,
   canManageAgents,
+  canManageIntegrations,
   canRunAgents,
   canManageMembers,
   canUpdateOrganization,
+  canViewIntegrations,
   invitableRoles,
 } from "@/lib/permissions";
 
@@ -73,5 +75,23 @@ describe("run permissions (mirror of the API)", () => {
       expect(canRunAgents(role)).toBe(true);
     }
     expect(canRunAgents("member")).toBe(false);
+  });
+});
+
+describe("integration permissions (mirror of the API)", () => {
+  it("owners, admins and developers see integrations; members do not", () => {
+    for (const role of ["owner", "admin", "developer"] as const) {
+      expect(canViewIntegrations(role)).toBe(true);
+    }
+    expect(canViewIntegrations("member")).toBe(false);
+  });
+
+  it("only owners and admins change integrations and their secrets", () => {
+    for (const role of ["owner", "admin"] as const) {
+      expect(canManageIntegrations(role)).toBe(true);
+    }
+    for (const role of ["developer", "member"] as const) {
+      expect(canManageIntegrations(role)).toBe(false);
+    }
   });
 });

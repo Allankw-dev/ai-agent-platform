@@ -38,3 +38,10 @@ export const canManageAgents = (role: OrgRole) =>
 /** Start and cancel runs (everyone in the organization can view them). */
 export const canRunAgents = (role: OrgRole) =>
   role === "owner" || role === "admin" || role === "developer";
+
+/** See which integrations exist (never their secrets). Members cannot. */
+export const canViewIntegrations = (role: OrgRole) =>
+  role === "owner" || role === "admin" || role === "developer";
+
+/** Add, edit and delete integrations, and save or remove their secrets. */
+export const canManageIntegrations = (role: OrgRole) => role === "owner" || role === "admin";

@@ -332,6 +332,10 @@ async def test_the_time_limit(workspace: Workspace, runtime_maker: Maker) -> Non
     )
     assert run["status"] == "failed"
     assert run["error"] == "Stopped: the agent hit its 5 second time limit."
+    # The model call the time limit cut off must not be left showing "running" on a failed run.
+    assert [(s["step_type"], s["status"]) for s in run["steps"]] == [("llm_call", "failed")]
+    assert run["steps"][0]["error"]
+    assert run["steps"][0]["finished_at"] is not None
 
 
 # ---------- the model misbehaving ----------
@@ -381,6 +385,7 @@ async def test_an_unexpected_crash_fails_the_run_and_hides_the_details(
     assert run["status"] == "failed"
     assert run["error"] == "An internal error stopped this run."
     assert "postgres://" not in json.dumps(run)
+    assert all(step["status"] != "running" for step in run["steps"])
 
 
 # ---------- lifecycle ----------

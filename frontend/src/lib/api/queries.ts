@@ -9,6 +9,8 @@ import type {
   AgentListItem,
   AgentRead,
   AgentStatus,
+  Integration,
+  IntegrationProvider,
   Invitation,
   InvitationAccepted,
   InvitationCreated,
@@ -42,6 +44,8 @@ export const keys = {
   runs: (orgId: string) => ["runs", orgId] as const,
   runList: (orgId: string, filters: RunFilters) => ["runs", orgId, filters] as const,
   run: (orgId: string, runId: string) => ["run", orgId, runId] as const,
+  integrations: (orgId: string) => ["integrations", orgId] as const,
+  integrationList: (orgId: string, limit: number) => ["integrations", orgId, limit] as const,
 };
 
 export type RunFilters = { agentId?: string; status?: RunStatus; limit: number };
@@ -401,5 +405,88 @@ export function useCancelRun(orgId: string, runId: string) {
         client.invalidateQueries({ queryKey: keys.runs(orgId) }),
       ]);
     },
+  });
+}
+
+// ---------- integrations ----------
+
+/** Only call this for people who may view integrations (the API refuses members). */
+export function useIntegrations(orgId: string, limit: number) {
+  const enabled = useEnabled();
+  return useQuery({
+    queryKey: keys.integrationList(orgId, limit),
+    queryFn: () =>
+      apiFetch<Page<Integration>>(`/organizations/${orgId}/integrations`, { query: { limit } }),
+    enabled,
+  });
+}
+
+export function useCreateIntegration(orgId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      provider: IntegrationProvider;
+      name: string;
+      config: Record<string, unknown>;
+    }) =>
+      apiFetch<Integration>(`/organizations/${orgId}/integrations`, {
+        method: "POST",
+        body: input,
+      }),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.integrations(orgId) }),
+  });
+}
+
+export function useUpdateIntegration(orgId: string, integrationId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      name?: string;
+      status?: "active" | "disabled";
+      config?: Record<string, unknown>;
+    }) =>
+      apiFetch<Integration>(`/organizations/${orgId}/integrations/${integrationId}`, {
+        method: "PATCH",
+        body: input,
+      }),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.integrations(orgId) }),
+  });
+}
+
+export function useDeleteIntegration(orgId: string, integrationId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<void>(`/organizations/${orgId}/integrations/${integrationId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.integrations(orgId) }),
+  });
+}
+
+/**
+ * Saving a secret is write-only: the request carries it, no response ever does. The component
+ * that calls this must clear the typed value as soon as the request ends.
+ */
+export function useSaveSecret(orgId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { integrationId: string; secret: string }) =>
+      apiFetch<Integration>(
+        `/organizations/${orgId}/integrations/${input.integrationId}/credential`,
+        { method: "PUT", body: { secret: input.secret } },
+      ),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.integrations(orgId) }),
+  });
+}
+
+export function useRemoveSecret(orgId: string, integrationId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<void>(`/organizations/${orgId}/integrations/${integrationId}/credential`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.integrations(orgId) }),
   });
 }

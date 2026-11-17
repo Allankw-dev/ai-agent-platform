@@ -174,3 +174,27 @@ export type RunStepRead = {
 };
 
 export type RunDetail = RunRead & { steps: RunStepRead[] };
+
+// ---------- integrations ----------
+
+export type IntegrationProvider =
+  "http" | "slack" | "github" | "gmail" | "google_calendar" | "webhook";
+export type IntegrationStatus = "active" | "disabled" | "error";
+
+/**
+ * An integration as the API returns it. There is no field for the secret: the API only says
+ * whether one is saved, by whom and when. A secret can be written but never read back.
+ */
+export type Integration = {
+  id: string;
+  provider: IntegrationProvider;
+  name: string;
+  status: IntegrationStatus;
+  config: Record<string, unknown>;
+  has_credential: boolean;
+  credential_set_by_id: string | null;
+  credential_set_by_name: string | null;
+  credential_updated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};

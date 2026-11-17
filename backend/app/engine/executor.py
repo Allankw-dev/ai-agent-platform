@@ -94,6 +94,10 @@ async def _close(
     async with maker() as session:
         await use_tenant(session, org_id=org_id)
         await run_repo.finish(session, run_id, status, output=output, error=error)
+        if status is RunStatus.FAILED:
+            # A run can fail in the middle of a step (the time limit cuts a model call off, or
+            # the code crashed). Never leave that step showing "running" on a finished run.
+            await run_repo.fail_running_steps(session, [run_id])
         await session.commit()
 
 
@@ -119,6 +123,7 @@ async def _execute(
                     # Redelivered after a worker died mid-run: do not run the agent twice.
                     log.warning("engine.run_interrupted")
                     await run_repo.finish(session, run_id, RunStatus.FAILED, error=INTERRUPTED)
+                    await run_repo.fail_running_steps(session, [run_id])
                     await session.commit()
                 else:
                     log.info("engine.run_skipped", status=run.status.value)

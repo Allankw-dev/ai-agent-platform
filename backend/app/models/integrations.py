@@ -46,10 +46,18 @@ class Credential(UUIDPrimaryKeyMixin, TimestampMixin, TenantMixin, Base):
 
     __tablename__ = "credentials"
 
-    integration_id: Mapped[uuid.UUID] = mapped_column(index=True)
+    integration_id: Mapped[uuid.UUID]
     kind: Mapped[CredentialKind] = mapped_column(enum_column(CredentialKind, "kind"))
+    # AES-256-GCM: nonce + ciphertext + tag, bound to this organization and integration.
+    # Only app/services/credentials.py decrypts it (see docs/credentials.md).
     encrypted_payload: Mapped[bytes] = mapped_column(LargeBinary)
     key_version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
     expires_at: Mapped[datetime | None] = nullable_timestamp()
+    # Who last saved the secret. Shown in the app; the secret itself never is.
+    set_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
 
-    __table_args__ = (tenant_fk("integration_id", "integrations", ondelete="CASCADE"),)
+    __table_args__ = (
+        tenant_fk("integration_id", "integrations", ondelete="CASCADE"),
+        # One secret per integration: replacing it updates this row.
+        UniqueConstraint("integration_id", name="uq_credentials_integration_id"),
+    )

@@ -17,6 +17,8 @@ OWNER, ADMIN, DEVELOPER, MEMBER = OrgRole.OWNER, OrgRole.ADMIN, OrgRole.DEVELOPE
         (Permission.AGENTS_MANAGE, {OWNER, ADMIN, DEVELOPER}),
         (Permission.RUNS_VIEW, {OWNER, ADMIN, DEVELOPER, MEMBER}),
         (Permission.RUNS_CREATE, {OWNER, ADMIN, DEVELOPER}),
+        (Permission.INTEGRATIONS_VIEW, {OWNER, ADMIN, DEVELOPER}),
+        (Permission.INTEGRATIONS_MANAGE, {OWNER, ADMIN}),
     ],
 )
 def test_permission_matrix(permission: Permission, allowed: set[OrgRole]) -> None:

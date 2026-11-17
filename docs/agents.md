@@ -24,7 +24,7 @@ defines its behaviour is saved as an immutable **version**.
 | `system_instructions` | Required, up to 20,000 characters. |
 | `objectives` | Optional, up to 4,000 characters. |
 | `model_params` | Only `max_output_tokens`. There is deliberately no temperature: newer models reject non-default values. |
-| `memory_config` | `conversation_memory`, `max_history_messages`. |
+| `memory_config` | `conversation_memory`, `max_history_messages`. Conversation memory is stored but not used yet (runs are single-turn), so it defaults to off. |
 | `limits` | `max_iterations`, `timeout_seconds`, `max_total_tokens`, optional `cost_budget_usd`. Defaults 10 / 120 / 50,000 / none. |
 | `tools` | Tool keys from the catalog (`GET /tools`), each with `requires_approval` and a small `config`. |
 

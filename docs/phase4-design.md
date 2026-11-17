@@ -1,7 +1,8 @@
 # Phase 4 design: credentials, real tools and approvals
 
-**Status: proposed, waiting for review. No code has been written.** Section 0 lists the decisions
-that need an answer; my recommendation is in bold. Say "accept all" or change any of them.
+**Status: approved ("accept all", 2026-11-16). Step 4A (credential vault) is built and awaiting
+acceptance; 4B onwards are not started.** Section 0 records the decisions; the recommendation in
+bold is what was accepted.
 
 ## 0. Decisions
 
@@ -54,6 +55,19 @@ separate database role just for secrets, workflows and schedules. They reuse thi
 - **Tests:** round trip; wrong key; tampered data; ciphertext moved to another row or organization;
   no endpoint, log line or run step ever contains a secret; members and developers get 403;
   another organization gets 404; every change appears in the audit log without the secret.
+
+### 3.1 As built in 4A
+
+See `docs/credentials.md` for the details. Where the build settled something the design left open:
+
+- `PUT /{id}/credential` saves or replaces the secret; `DELETE /{id}/credential` removes it (the
+  design listed only replace and delete-integration, but "delete a secret" needs its own call).
+- Non-secret settings live in the integration's `config` and are validated per provider:
+  HTTP has `allowed_hosts` (exact host names, no IP addresses), `auth_header` and `auth_scheme`
+  (how the secret is sent); Slack has `allowed_channels`. 4B and 4C read these.
+- Only `http` and `slack` integrations can be created; other providers answer 422.
+- Audit actions: `integration.created|updated|deleted`, `credential.added|replaced|removed`.
+- Errors: `503 credentials_not_configured` when no usable key is set.
 
 ## 4. Tools
 
@@ -131,10 +145,11 @@ stretch of work, and waiting time is not counted.
 - `GET /organizations/{org}/approvals?status=pending`, `GET /{id}`, `POST /{id}/approve`, `POST /{id}/reject`
 - The run detail gains its pending approval, so the run page can show it.
 
-### 5.5 Database changes (one migration, 0006)
+### 5.5 Database changes (migration 0008)
 
 `agent_runs.checkpoint` (JSON), a new step status `awaiting_approval`, and indexes for the approvals
-inbox. Everything else already exists.
+inbox. Everything else already exists. (Migrations 0006 and 0007 were used by 4A: 0006 dropped the
+unused `agent_runs.thread_id`, 0007 made credentials one-per-integration and added `set_by_id`.)
 
 ### 5.6 Screens
 
@@ -164,10 +179,10 @@ check before the next.
 
 | Step | What | Main tests |
 | --- | --- | --- |
-| 4A | Credential vault, integrations API and screen | Encryption, no-leak, roles, tenant isolation, audit |
+| 4A (built) | Credential vault, integrations API and screen | Encryption, no-leak, roles, tenant isolation, audit |
 | 4B | Address check, `http.get`, `http.request`, integration choice on the agent form | Every blocked address class, redirects, limits, allowlist |
 | 4C | `slack.send_message` | Channel allowlist, mention neutralising, mocked Slack |
-| 4D | Pause and resume, approvals API, expiry, migration 0006 | Double decide, expiry, cancel, at-most-once, resume races |
+| 4D | Pause and resume, approvals API, expiry, migration 0008 | Double decide, expiry, cancel, at-most-once, resume races |
 | 4E | Approvals tab and run page states | Roles, decisions, empty and error states |
 | 4F | End-to-end acceptance on your machine | Approve, reject and expire, with a real Slack message |
 

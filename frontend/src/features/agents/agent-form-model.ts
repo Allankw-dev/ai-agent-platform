@@ -29,7 +29,7 @@ export const LIMITS = {
   maxOutputTokens: { min: 1, max: 65_536 },
 } as const;
 
-const DEFAULT_MEMORY: MemoryConfig = { conversation_memory: true, max_history_messages: 20 };
+const DEFAULT_MEMORY: MemoryConfig = { conversation_memory: false, max_history_messages: 20 };
 const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$/;
 
 export type ToolSelection = {
@@ -119,7 +119,7 @@ export function valuesFromAgent(agent: AgentRead): AgentFormValues {
         ? ""
         : String(version.model_params.max_output_tokens),
     memory: {
-      conversation_memory: version.memory_config.conversation_memory ?? true,
+      conversation_memory: version.memory_config.conversation_memory ?? false,
       max_history_messages: version.memory_config.max_history_messages ?? 20,
     },
   };

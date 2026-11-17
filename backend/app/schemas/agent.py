@@ -23,9 +23,14 @@ class ModelParams(BaseModel):
 
 
 class MemoryConfig(BaseModel):
+    """Conversation memory is stored but not used yet: runs are single-turn (see docs/engine.md).
+
+    It defaults to off so a new agent does not claim a capability it does not have.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
-    conversation_memory: bool = True
+    conversation_memory: bool = False
     max_history_messages: int = Field(default=20, ge=1, le=200)
 
 
