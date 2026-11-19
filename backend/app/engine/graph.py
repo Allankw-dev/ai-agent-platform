@@ -15,7 +15,7 @@ crashing handlers each end in an error result that is fed back to the model, nev
 
 import asyncio
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any, TypedDict
 
@@ -226,7 +226,8 @@ def build_graph(deps: EngineDeps) -> Any:
                 raise ToolError("This tool is not implemented yet.")
             validated = validate_arguments(tool.input_schema, call.args)
             async with asyncio.timeout(tool.timeout_seconds):
-                result = await handler(validated, deps.context)
+                context = replace(deps.context, tool_config=tool.config or {})
+                result = await handler(validated, context)
         except TimeoutError:
             message = f"The tool timed out after {tool.timeout_seconds} seconds."
             await recorder.finish_step(step, StepStatus.FAILED, error=message)

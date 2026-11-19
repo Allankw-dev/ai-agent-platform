@@ -9,7 +9,8 @@ import {
   type AgentFormValues,
 } from "@/features/agents/agent-form-model";
 import { apiError, apiFetch, routeApi } from "@/test/api-mock";
-import { agent, CATALOG, version } from "@/test/agents";
+import { agent, CATALOG, CATALOG_WITH_HTTP, pageOf, version } from "@/test/agents";
+import type { Integration } from "@/lib/api/types";
 import { resetAuth } from "@/test/auth-mock";
 import { renderWithQuery } from "@/test/render";
 
@@ -28,6 +29,7 @@ function renderForm(props: Partial<React.ComponentProps<typeof AgentForm>> = {})
   return renderWithQuery(
     <AgentForm
       mode="create"
+      orgId="org-1"
       initial={emptyFormValues()}
       submitLabel="Create agent"
       submittingLabel="Creating…"
@@ -117,8 +119,8 @@ describe("AgentForm", () => {
       maxIterations: "4",
     });
     expect(values.tools).toEqual([
-      { toolKey: "utility.calculate", requiresApproval: true, config: {} },
-      { toolKey: "slack.send_message", requiresApproval: true, config: {} },
+      { toolKey: "utility.calculate", requiresApproval: true, config: {}, provider: null },
+      { toolKey: "slack.send_message", requiresApproval: true, config: {}, provider: null },
     ]);
   });
 
@@ -193,6 +195,7 @@ describe("AgentForm", () => {
             tool_key: "utility.calculate",
             name: "Calculator",
             description: "d",
+            provider: null,
             is_sensitive: false,
             requires_approval: true,
             config: {},
@@ -232,5 +235,142 @@ describe("AgentForm", () => {
     routeApi({ "GET /tools": apiError(500, "boom", "The server had a problem.") });
     renderForm();
     await waitFor(() => expect(screen.getByText("The server had a problem.")).toBeInTheDocument());
+  });
+
+  describe("tools that need an integration", () => {
+    const stored = (overrides: Partial<Integration>): Integration => ({
+      id: "int-1",
+      provider: "http",
+      name: "Weather API",
+      status: "active",
+      config: { allowed_hosts: ["api.example.com"] },
+      has_credential: true,
+      credential_set_by_id: null,
+      credential_set_by_name: null,
+      credential_updated_at: null,
+      created_at: "2026-11-16T00:00:00Z",
+      updated_at: "2026-11-16T00:00:00Z",
+      ...overrides,
+    });
+    const LIST = "GET /organizations/org-1/integrations";
+
+    function withIntegrations(items: Integration[]) {
+      routeApi({ "GET /tools": CATALOG_WITH_HTTP, [LIST]: pageOf(items) });
+    }
+
+    it("does not even ask for integrations when no tool needs one", async () => {
+      renderForm();
+      await screen.findByRole("checkbox", { name: "Calculator" });
+      expect(apiFetch.mock.calls.some(([path]) => String(path).includes("/integrations"))).toBe(
+        false,
+      );
+    });
+
+    it("offers only active integrations of the right type, with what they allow", async () => {
+      withIntegrations([
+        stored({ id: "int-1", name: "Weather API" }),
+        stored({ id: "int-2", name: "Old API", status: "disabled" }),
+        stored({ id: "int-3", name: "Team Slack", provider: "slack", config: {} }),
+        stored({ id: "int-4", name: "Maps API", config: { allowed_hosts: ["maps.example.com"] } }),
+      ]);
+      const user = userEvent.setup();
+      renderForm();
+      await user.click(await screen.findByRole("checkbox", { name: "HTTP GET" }));
+      const choice = await screen.findByLabelText("Integration for HTTP GET");
+      const names = within(choice)
+        .getAllByRole("option")
+        .map((option) => option.textContent);
+      expect(names).toEqual(["Choose an integration…", "Weather API", "Maps API"]);
+      await user.selectOptions(choice, "int-4");
+      expect(screen.getByText("Allowed hosts: maps.example.com")).toBeInTheDocument();
+    });
+
+    it("chooses the integration for you when only one fits", async () => {
+      withIntegrations([stored({})]);
+      const user = userEvent.setup();
+      renderForm();
+      await screen.findByRole("checkbox", { name: "HTTP GET" });
+      await user.click(screen.getByRole("checkbox", { name: "HTTP GET" }));
+      const choice = await screen.findByLabelText("Integration for HTTP GET");
+      await waitFor(() => expect(choice).toHaveValue("int-1"));
+      await fillBasics(user);
+      await user.click(screen.getByRole("button", { name: "Create agent" }));
+      expect(onSubmit.mock.calls[0]?.[0].tools).toEqual([
+        {
+          toolKey: "http.get",
+          requiresApproval: false,
+          config: { integration_id: "int-1" },
+          provider: "http",
+        },
+      ]);
+    });
+
+    it("blocks saving until an integration is chosen when there are several", async () => {
+      withIntegrations([stored({ id: "int-1" }), stored({ id: "int-2", name: "Maps API" })]);
+      const user = userEvent.setup();
+      renderForm();
+      await screen.findByRole("checkbox", { name: "HTTP GET" });
+      await user.click(screen.getByRole("checkbox", { name: "HTTP GET" }));
+      const choice = await screen.findByLabelText("Integration for HTTP GET");
+      expect(choice).toHaveValue("");
+      await fillBasics(user);
+      await user.click(screen.getByRole("button", { name: "Create agent" }));
+      expect(await screen.findByText(/Choose an integration for each tool/)).toBeInTheDocument();
+      expect(onSubmit).not.toHaveBeenCalled();
+
+      await user.selectOptions(choice, "int-2");
+      await user.click(screen.getByRole("button", { name: "Create agent" }));
+      expect(onSubmit.mock.calls[0]?.[0].tools[0]?.config).toEqual({ integration_id: "int-2" });
+    });
+
+    it("points to the Integrations tab when there is nothing to choose", async () => {
+      withIntegrations([stored({ id: "int-3", provider: "slack", config: {} })]);
+      const user = userEvent.setup();
+      renderForm();
+      await screen.findByRole("checkbox", { name: "HTTP GET" });
+      await user.click(screen.getByRole("checkbox", { name: "HTTP GET" }));
+      expect(await screen.findByText(/No active HTTP \/ API integration yet/)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Integrations tab" })).toHaveAttribute(
+        "href",
+        "/orgs/org-1/integrations",
+      );
+      await fillBasics(user);
+      await user.click(screen.getByRole("button", { name: "Create agent" }));
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it("warns when an agent's chosen integration has since been disabled or deleted", async () => {
+      withIntegrations([stored({ id: "int-1", status: "disabled" })]);
+      const saved = agent({
+        current_version: version(2, {
+          tools: [
+            {
+              tool_key: "http.get",
+              name: "HTTP GET",
+              description: "d",
+              provider: "http",
+              is_sensitive: false,
+              requires_approval: false,
+              config: { integration_id: "int-1" },
+            },
+          ],
+        }),
+      });
+      renderForm({ mode: "edit", initial: valuesFromAgent(saved), submitLabel: "Save changes" });
+      expect(await screen.findByText(/chosen earlier is disabled or deleted/)).toBeInTheDocument();
+    });
+
+    it("keeps the approval switch locked on for the write tool", async () => {
+      withIntegrations([stored({})]);
+      const user = userEvent.setup();
+      renderForm();
+      await screen.findByRole("checkbox", { name: "HTTP request (changes data)" });
+      await user.click(screen.getByRole("checkbox", { name: "HTTP request (changes data)" }));
+      const approval = await screen.findByRole("checkbox", {
+        name: "Require approval for HTTP request (changes data)",
+      });
+      expect(approval).toBeChecked();
+      expect(approval).toBeDisabled();
+    });
   });
 });

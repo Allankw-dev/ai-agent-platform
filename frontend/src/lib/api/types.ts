@@ -65,6 +65,8 @@ export type ToolInfo = {
   name: string;
   description: string;
   input_schema: Record<string, unknown>;
+  /** The integration type this tool needs, or null when it needs none. */
+  provider: IntegrationProvider | null;
   is_sensitive: boolean;
   timeout_seconds: number;
 };
@@ -73,6 +75,7 @@ export type ToolAssignmentRead = {
   tool_key: string;
   name: string;
   description: string;
+  provider: IntegrationProvider | null;
   is_sensitive: boolean;
   requires_approval: boolean;
   config: Record<string, unknown>;

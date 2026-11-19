@@ -31,6 +31,7 @@ from app.models.enums import RunStatus
 from app.repositories import agents as agent_repo
 from app.repositories import runs as run_repo
 from app.tools.base import ToolContext, ToolDefinition
+from app.tools.integration_access import DatabaseIntegrationAccess
 
 log = structlog.get_logger()
 
@@ -189,7 +190,12 @@ async def _execute(
                 limits=limits,
                 prices=settings.model_prices,
             ),
-            context=ToolContext(org_id=org_id, agent_id=agent_id, run_id=run_id),
+            context=ToolContext(
+                org_id=org_id,
+                agent_id=agent_id,
+                run_id=run_id,
+                integrations=DatabaseIntegrationAccess(maker, org_id),
+            ),
         )
 
         try:

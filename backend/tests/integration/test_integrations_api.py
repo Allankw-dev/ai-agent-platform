@@ -31,15 +31,6 @@ HTTP = {
 }
 
 
-@pytest.fixture
-def vault_key(monkeypatch: pytest.MonkeyPatch) -> str:
-    """Give the server an encryption key for the duration of a test."""
-    key = generate_key()
-    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", key)
-    get_settings.cache_clear()
-    return key
-
-
 @pytest.fixture(autouse=True)
 def _reset_settings() -> Any:
     yield

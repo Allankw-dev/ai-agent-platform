@@ -28,6 +28,7 @@ const saved = agent({
         tool_key: "utility.calculate",
         name: "Calculator",
         description: "d",
+        provider: null,
         is_sensitive: false,
         requires_approval: false,
         config: { precision: 2 },

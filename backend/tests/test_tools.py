@@ -44,7 +44,12 @@ def _tool(**overrides: Any) -> ToolDefinition:
 
 
 def test_builtin_handlers_are_registered() -> None:
-    assert {"utility.current_time", "utility.calculate"} <= registered_keys()
+    assert {
+        "utility.current_time",
+        "utility.calculate",
+        "http.get",
+        "http.request",
+    } <= registered_keys()
     assert get_handler("nope.nothing") is None
 
 

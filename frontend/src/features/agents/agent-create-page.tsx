@@ -41,6 +41,7 @@ export function AgentCreatePage() {
       <h2 className="text-lg font-semibold">Create an agent</h2>
       <AgentForm
         mode="create"
+        orgId={org.id}
         initial={emptyFormValues()}
         submitLabel="Create agent"
         submittingLabel="Creating…"

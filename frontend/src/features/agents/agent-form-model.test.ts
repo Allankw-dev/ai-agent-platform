@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_MODEL,
+  autoChooseIntegrations,
   emptyFormValues,
+  integrationIdOf,
   sameConfig,
   toAgentConfig,
   validateAgentForm,
@@ -147,6 +149,7 @@ describe("valuesFromAgent", () => {
             tool_key: "utility.calculate",
             name: "Calculator",
             description: "d",
+            provider: null,
             is_sensitive: false,
             requires_approval: true,
             config: { precision: 2 },
@@ -197,5 +200,108 @@ describe("sameConfig", () => {
     expect(sameConfig(a, approval)).toBe(false);
     expect(sameConfig(a, { ...a, model: "other-model" })).toBe(false);
     expect(sameConfig(a, { ...a, limits: { ...a.limits, max_iterations: 3 } })).toBe(false);
+  });
+});
+
+describe("tools that need an integration", () => {
+  const needs = (config: Record<string, unknown> = {}) => ({
+    toolKey: "http.get",
+    requiresApproval: false,
+    config,
+    provider: "http" as const,
+  });
+
+  it("is invalid until an integration is chosen", () => {
+    const errors = validateAgentForm(valid({ tools: [needs()] }), "create");
+    expect(errors.tools).toMatch(/Choose an integration/);
+    expect(
+      validateAgentForm(valid({ tools: [needs({ integration_id: "" })] }), "create").tools,
+    ).toBeTruthy();
+  });
+
+  it("is valid once one is chosen, and the choice is sent to the API", () => {
+    const values = valid({ tools: [needs({ integration_id: "int-1" })] });
+    expect(validateAgentForm(values, "create").tools).toBeUndefined();
+    expect(toAgentConfig(values).tools).toEqual([
+      { tool_key: "http.get", requires_approval: false, config: { integration_id: "int-1" } },
+    ]);
+  });
+
+  it("does not ask for an integration for tools that need none", () => {
+    const plain = { toolKey: "utility.calculate", requiresApproval: false, config: {} };
+    expect(validateAgentForm(valid({ tools: [plain] }), "create").tools).toBeUndefined();
+    expect(
+      validateAgentForm(valid({ tools: [{ ...plain, provider: null }] }), "create").tools,
+    ).toBeUndefined();
+  });
+
+  it("reads the chosen integration back from a saved agent", () => {
+    const saved = agent({
+      current_version: version(2, {
+        tools: [
+          {
+            tool_key: "http.get",
+            name: "HTTP GET",
+            description: "d",
+            provider: "http",
+            is_sensitive: false,
+            requires_approval: false,
+            config: { integration_id: "int-9" },
+          },
+        ],
+      }),
+    });
+    const values = valuesFromAgent(saved);
+    expect(values.tools[0]?.provider).toBe("http");
+    expect(integrationIdOf(values.tools[0]!)).toBe("int-9");
+    expect(sameConfig(toAgentConfig(values), toAgentConfig(valuesFromAgent(saved)))).toBe(true);
+  });
+
+  it("treats a missing or non-text integration id as not chosen", () => {
+    expect(integrationIdOf(needs())).toBe("");
+    expect(integrationIdOf(needs({ integration_id: 5 }))).toBe("");
+  });
+});
+
+describe("autoChooseIntegrations", () => {
+  const needs = {
+    toolKey: "http.get",
+    requiresApproval: false,
+    config: {},
+    provider: "http" as const,
+  };
+  const http = (id: string, status = "active") => ({ id, provider: "http" as const, status });
+
+  it("chooses the only fitting integration", () => {
+    expect(autoChooseIntegrations([needs], [http("a")])[0]?.config).toEqual({
+      integration_id: "a",
+    });
+  });
+
+  it("leaves the choice to the person when none or several fit", () => {
+    expect(autoChooseIntegrations([needs], [])).toEqual([needs]);
+    expect(autoChooseIntegrations([needs], [http("a"), http("b")])).toEqual([needs]);
+  });
+
+  it("ignores disabled integrations and other types", () => {
+    const slack = { id: "s", provider: "slack" as const, status: "active" };
+    expect(autoChooseIntegrations([needs], [http("a", "disabled"), slack])).toEqual([needs]);
+    expect(autoChooseIntegrations([needs], [http("a", "disabled"), http("b")])[0]?.config).toEqual({
+      integration_id: "b",
+    });
+  });
+
+  it("never overrides a choice already made, nor touches tools that need none", () => {
+    const chosen = { ...needs, config: { integration_id: "z" } };
+    const plain = { toolKey: "utility.calculate", requiresApproval: false, config: {} };
+    const result = autoChooseIntegrations([chosen, plain], [http("a")]);
+    expect(result[0]?.config).toEqual({ integration_id: "z" });
+    expect(result[1]).toBe(plain);
+  });
+
+  it("returns the same array when nothing changes, and waits for the list to load", () => {
+    const tools = [needs];
+    expect(autoChooseIntegrations(tools, [http("a"), http("b")])).toBe(tools);
+    expect(autoChooseIntegrations(tools, undefined)).toBe(tools);
   });
 });

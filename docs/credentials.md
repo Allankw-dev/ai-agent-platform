@@ -52,8 +52,9 @@ All under `/api/v1/organizations/{org_id}/integrations`:
 
 ## Rules that keep secrets secret
 
-1. Only `app/services/credentials.py` decrypts (`reveal_secret`), and only server-side tool code in
-   the worker may call it. Tests read the source to enforce this.
+1. Only `app/services/credentials.py` decrypts (`reveal_secret`), and the only caller is
+   `app/tools/integration_access.py`, which hands the secret to a running tool call in an object
+   whose repr hides it. Tests read the source to enforce this.
 2. No response model has a field for a secret. Validation errors for the credential route drop the
    submitted value (FastAPI would otherwise echo it back as `input`).
 3. The audit log records who and when (`credential.added|replaced|removed`), never the value.

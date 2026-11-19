@@ -1,6 +1,7 @@
 import type {
   AgentConfigInput,
   AgentRead,
+  IntegrationProvider,
   MemoryConfig,
   ToolAssignmentInput,
 } from "@/lib/api/types";
@@ -35,9 +36,43 @@ const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$/;
 export type ToolSelection = {
   toolKey: string;
   requiresApproval: boolean;
-  /** Carried through untouched: the form does not edit per-tool settings yet. */
+  /**
+   * The tool's settings. For a tool that needs an integration this is `{ integration_id }`, chosen
+   * in the form; for other tools it is carried through untouched.
+   */
   config: Record<string, unknown>;
+  /** The integration type the tool needs (undefined or null when it needs none). */
+  provider?: IntegrationProvider | null;
 };
+
+/**
+ * A tool that needs an integration and has none chosen gets the only fitting one (active and of
+ * the right type), if there is exactly one. With none or several, the person chooses.
+ */
+export function autoChooseIntegrations(
+  tools: ToolSelection[],
+  integrations: { id: string; provider: IntegrationProvider; status: string }[] | undefined,
+): ToolSelection[] {
+  if (!integrations) return tools;
+  let changed = false;
+  const next = tools.map((selection) => {
+    if (!selection.provider || integrationIdOf(selection)) return selection;
+    const fitting = integrations.filter(
+      (item) => item.provider === selection.provider && item.status === "active",
+    );
+    const only = fitting.length === 1 ? fitting[0] : undefined;
+    if (!only) return selection;
+    changed = true;
+    return { ...selection, config: { ...selection.config, integration_id: only.id } };
+  });
+  return changed ? next : tools;
+}
+
+/** The integration chosen for a tool, or "" when none is chosen yet. */
+export function integrationIdOf(selection: ToolSelection): string {
+  const id = selection.config.integration_id;
+  return typeof id === "string" ? id : "";
+}
 
 export type AgentFormValues = {
   name: string;
@@ -67,6 +102,7 @@ export type AgentFormField =
   | "maxTotalTokens"
   | "costBudget"
   | "maxOutputTokens"
+  | "tools"
   | "changeNote";
 
 export type AgentFormErrors = Partial<Record<AgentFormField, string>>;
@@ -109,6 +145,7 @@ export function valuesFromAgent(agent: AgentRead): AgentFormValues {
       toolKey: tool.tool_key,
       requiresApproval: tool.requires_approval,
       config: tool.config,
+      provider: tool.provider,
     })),
     maxIterations: String(limits.max_iterations ?? base.maxIterations),
     timeoutSeconds: String(limits.timeout_seconds ?? base.timeoutSeconds),
@@ -187,6 +224,10 @@ export function validateAgentForm(
   if (values.maxOutputTokens.trim()) {
     const output = checkWholeNumber(values.maxOutputTokens, LIMITS.maxOutputTokens, "tokens");
     if (output) errors.maxOutputTokens = output;
+  }
+
+  if (values.tools.some((tool) => tool.provider && !integrationIdOf(tool))) {
+    errors.tools = "Choose an integration for each tool that needs one.";
   }
 
   if (mode === "edit" && values.changeNote.trim().length > 500) {

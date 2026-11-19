@@ -41,7 +41,7 @@ def seed_tool(conn: Connection) -> uuid.UUID:
     return _one(
         conn,
         "INSERT INTO tools (key, name, description, input_schema) "
-        "VALUES ('http.request', 'HTTP', 'Call an API', CAST('{}' AS jsonb)) RETURNING id",
+        "VALUES ('test.probe', 'Probe', 'A made-up tool for tests', CAST('{}' AS jsonb)) RETURNING id",
     )
 
 
@@ -105,7 +105,7 @@ def seed_org(conn: Connection, slug: str, tool: uuid.UUID) -> OrgData:
     conn.execute(
         text(
             "INSERT INTO approvals (org_id, run_id, tool_key, proposed_input) "
-            "VALUES (:o, :r, 'http.request', CAST('{}' AS jsonb))"
+            "VALUES (:o, :r, 'test.probe', CAST('{}' AS jsonb))"
         ),
         {"o": org, "r": run},
     )

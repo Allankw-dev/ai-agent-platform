@@ -36,6 +36,7 @@ const v2 = version(2, {
       tool_key: "utility.calculate",
       name: "Calculator",
       description: "d",
+      provider: null,
       is_sensitive: false,
       requires_approval: true,
       config: {},

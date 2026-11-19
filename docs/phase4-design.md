@@ -1,7 +1,7 @@
 # Phase 4 design: credentials, real tools and approvals
 
-**Status: approved ("accept all", 2026-11-16). Step 4A (credential vault) is built and awaiting
-acceptance; 4B onwards are not started.** Section 0 records the decisions; the recommendation in
+**Status: approved ("accept all", 2026-11-16). Step 4A (credential vault) is accepted; 4B (HTTP
+tools) is built and awaiting acceptance; 4C onwards are not started.** Section 0 records the decisions; the recommendation in
 bold is what was accepted.
 
 ## 0. Decisions
@@ -77,6 +77,16 @@ provider and is active.
 
 ### 4.1 HTTP tools (4B): `http.get` and `http.request`
 
+> **As built.** Details are in `docs/http-tools.md`. Where the build settled or tightened the design:
+> inputs use a `headers` list of `{name, value}` pairs and a text `body` plus `content_type` (Gemini
+> accepts neither free-form objects nor union types); only port 443 is allowed; `http.request`
+> follows **no** redirects, so an approved action is exactly what the approver saw; the integration's
+> credential goes only to the host first called; the allowed hosts and the credential are read from the
+> integration at call time, so an admin's change applies to saved agents at once; a tool grant's
+> integration is checked when a version is saved (not again on rollback, which restores an old
+> version as it was) and every time the tool runs; `http.request` is built and tested but the engine
+> still skips it until approvals exist (4D).
+
 | Control | Rule |
 | --- | --- |
 | Allowed hosts | Exact host names listed on the integration. An empty list refuses every request. |
@@ -145,11 +155,11 @@ stretch of work, and waiting time is not counted.
 - `GET /organizations/{org}/approvals?status=pending`, `GET /{id}`, `POST /{id}/approve`, `POST /{id}/reject`
 - The run detail gains its pending approval, so the run page can show it.
 
-### 5.5 Database changes (migration 0008)
+### 5.5 Database changes (migration 0009)
 
 `agent_runs.checkpoint` (JSON), a new step status `awaiting_approval`, and indexes for the approvals
-inbox. Everything else already exists. (Migrations 0006 and 0007 were used by 4A: 0006 dropped the
-unused `agent_runs.thread_id`, 0007 made credentials one-per-integration and added `set_by_id`.)
+inbox. Everything else already exists. (Migrations 0006 to 0008 were used earlier: 0006 dropped the unused `agent_runs.thread_id`, 0007
+made credentials one-per-integration and added `set_by_id`, 0008 added the HTTP tools.)
 
 ### 5.6 Screens
 
@@ -180,9 +190,9 @@ check before the next.
 | Step | What | Main tests |
 | --- | --- | --- |
 | 4A (built) | Credential vault, integrations API and screen | Encryption, no-leak, roles, tenant isolation, audit |
-| 4B | Address check, `http.get`, `http.request`, integration choice on the agent form | Every blocked address class, redirects, limits, allowlist |
+| 4B (built) | Address check, `http.get`, `http.request`, integration choice on the agent form | Every blocked address class, redirects, limits, allowlist |
 | 4C | `slack.send_message` | Channel allowlist, mention neutralising, mocked Slack |
-| 4D | Pause and resume, approvals API, expiry, migration 0008 | Double decide, expiry, cancel, at-most-once, resume races |
+| 4D | Pause and resume, approvals API, expiry, migration 0009 | Double decide, expiry, cancel, at-most-once, resume races |
 | 4E | Approvals tab and run page states | Roles, decisions, empty and error states |
 | 4F | End-to-end acceptance on your machine | Approve, reject and expire, with a real Slack message |
 

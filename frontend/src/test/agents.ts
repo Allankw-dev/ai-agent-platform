@@ -28,6 +28,7 @@ export const CALCULATOR: ToolInfo = {
   name: "Calculator",
   description: "Evaluate an arithmetic expression.",
   input_schema: { type: "object" },
+  provider: null,
   is_sensitive: false,
   timeout_seconds: 5,
 };
@@ -37,6 +38,7 @@ export const CLOCK: ToolInfo = {
   name: "Current time",
   description: "Get the current date and time.",
   input_schema: { type: "object" },
+  provider: null,
   is_sensitive: false,
   timeout_seconds: 5,
 };
@@ -46,11 +48,33 @@ export const SENDER: ToolInfo = {
   name: "Send Slack message",
   description: "Post a message to a channel.",
   input_schema: { type: "object" },
+  provider: null,
   is_sensitive: true,
   timeout_seconds: 10,
 };
 
+export const HTTP_GET: ToolInfo = {
+  key: "http.get",
+  name: "HTTP GET",
+  description: "Fetch a web page or API endpoint.",
+  input_schema: { type: "object" },
+  provider: "http",
+  is_sensitive: false,
+  timeout_seconds: 20,
+};
+
+export const HTTP_REQUEST: ToolInfo = {
+  key: "http.request",
+  name: "HTTP request (changes data)",
+  description: "Send a POST, PUT, PATCH or DELETE request.",
+  input_schema: { type: "object" },
+  provider: "http",
+  is_sensitive: true,
+  timeout_seconds: 20,
+};
+
 export const CATALOG = [CALCULATOR, CLOCK, SENDER];
+export const CATALOG_WITH_HTTP = [...CATALOG, HTTP_GET, HTTP_REQUEST];
 
 export function version(number: number, overrides: Partial<VersionRead> = {}): VersionRead {
   return {

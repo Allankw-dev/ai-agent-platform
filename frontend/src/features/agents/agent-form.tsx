@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 
 import { ErrorNotice } from "@/components/error-notice";
@@ -15,15 +15,20 @@ import { TextareaField } from "@/components/ui/textarea";
 import {
   LIMITS,
   MODEL_SUGGESTIONS,
+  autoChooseIntegrations,
+  integrationIdOf,
   validateAgentForm,
   type AgentFormValues,
   type ToolSelection,
 } from "@/features/agents/agent-form-model";
-import { useTools } from "@/lib/api/queries";
-import type { ToolInfo } from "@/lib/api/types";
+import { PROVIDER_LABELS, describeSettings } from "@/features/integrations/integration-form-model";
+import { useIntegrations, useTools } from "@/lib/api/queries";
+import type { Integration, ToolInfo } from "@/lib/api/types";
 
 type Props = {
   mode: "create" | "edit";
+  /** The organization, needed to list the integrations a tool can use. */
+  orgId: string;
   initial: AgentFormValues;
   submitLabel: string;
   submittingLabel: string;
@@ -35,13 +40,91 @@ type Props = {
   onSubmit: (values: AgentFormValues) => void;
 };
 
+type IntegrationList = {
+  items: Integration[] | undefined;
+  loading: boolean;
+  error: unknown;
+};
+
+/** Which integration a tool should use. Only active integrations of the right type are offered. */
+function IntegrationChoice({
+  tool,
+  choice,
+  orgId,
+  integrations,
+  onPick,
+}: {
+  tool: ToolInfo;
+  choice: ToolSelection;
+  orgId: string;
+  integrations: IntegrationList;
+  onPick: (integrationId: string) => void;
+}) {
+  const label = tool.provider ? PROVIDER_LABELS[tool.provider] : "";
+  const options = (integrations.items ?? []).filter(
+    (item) => item.provider === tool.provider && item.status === "active",
+  );
+  const current = integrationIdOf(choice);
+  const chosen = options.find((item) => item.id === current);
+  const gone = current !== "" && !chosen && !integrations.loading && !integrations.error;
+
+  if (integrations.loading) {
+    return <p className="ml-7 text-sm text-muted-foreground">Loading integrations…</p>;
+  }
+  if (integrations.error) return <ErrorNotice error={integrations.error} />;
+  if (options.length === 0) {
+    return (
+      <p className="ml-7 text-sm text-muted-foreground">
+        {gone
+          ? `The ${label} integration chosen earlier is disabled or deleted. `
+          : `No active ${label} integration yet. `}
+        Add one in the{" "}
+        <Link href={`/orgs/${orgId}/integrations`} className="text-accent underline">
+          Integrations tab
+        </Link>
+        , then come back and choose it here.
+      </p>
+    );
+  }
+  return (
+    <div className="ml-7 space-y-1.5">
+      <label htmlFor={`tool-${tool.key}-integration`} className="text-sm font-medium">
+        Integration for {tool.name}
+      </label>
+      <Select
+        id={`tool-${tool.key}-integration`}
+        className="w-full"
+        value={chosen ? current : ""}
+        onChange={(event) => onPick(event.target.value)}
+      >
+        <option value="">Choose an integration…</option>
+        {options.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.name}
+          </option>
+        ))}
+      </Select>
+      {chosen && <p className="text-xs text-muted-foreground">{describeSettings(chosen)}</p>}
+      {gone && (
+        <p className="text-xs text-danger">
+          The integration chosen earlier is disabled or deleted. Choose another.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ToolPicker({
   tools,
   selected,
+  orgId,
+  integrations,
   onChange,
 }: {
   tools: ToolInfo[];
   selected: ToolSelection[];
+  orgId: string;
+  integrations: IntegrationList;
   onChange: (next: ToolSelection[]) => void;
 }) {
   return (
@@ -58,16 +141,21 @@ function ToolPicker({
                 className="mt-1 size-4 accent-accent"
                 checked={choice !== undefined}
                 aria-describedby={`tool-${tool.key}-description`}
-                onChange={(event) =>
-                  onChange(
-                    event.target.checked
-                      ? [
-                          ...selected,
-                          { toolKey: tool.key, requiresApproval: tool.is_sensitive, config: {} },
-                        ]
-                      : selected.filter((entry) => entry.toolKey !== tool.key),
-                  )
-                }
+                onChange={(event) => {
+                  if (!event.target.checked) {
+                    onChange(selected.filter((entry) => entry.toolKey !== tool.key));
+                    return;
+                  }
+                  onChange([
+                    ...selected,
+                    {
+                      toolKey: tool.key,
+                      requiresApproval: tool.is_sensitive,
+                      config: {},
+                      provider: tool.provider,
+                    },
+                  ]);
+                }}
               />
               <div className="min-w-0 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
@@ -82,6 +170,26 @@ function ToolPicker({
                 </p>
               </div>
             </div>
+            {choice && tool.provider && (
+              <IntegrationChoice
+                tool={tool}
+                choice={choice}
+                orgId={orgId}
+                integrations={integrations}
+                onPick={(integrationId) =>
+                  onChange(
+                    selected.map((entry) =>
+                      entry.toolKey === tool.key
+                        ? {
+                            ...entry,
+                            config: integrationId ? { integration_id: integrationId } : {},
+                          }
+                        : entry,
+                    ),
+                  )
+                }
+              />
+            )}
             {choice && (
               <label className="ml-7 flex items-center gap-2 text-sm">
                 <input
@@ -118,6 +226,7 @@ function ToolPicker({
 /** The form shared by "create an agent" and "edit an agent". */
 export function AgentForm({
   mode,
+  orgId,
   initial,
   submitLabel,
   submittingLabel,
@@ -128,7 +237,17 @@ export function AgentForm({
   onSubmit,
 }: Props) {
   const tools = useTools();
+  // Only fetch integrations when some tool in the catalog needs one.
+  const needsIntegrations = tools.data?.some((tool) => tool.provider) ?? false;
+  const integrations = useIntegrations(orgId, 100, needsIntegrations);
   const [values, setValues] = useState<AgentFormValues>(initial);
+
+  // A tool that needs an integration gets the only fitting one chosen for the person.
+  const integrationItems = integrations.data?.items;
+  const resolvedTools = useMemo(
+    () => autoChooseIntegrations(values.tools, integrationItems),
+    [values.tools, integrationItems],
+  );
   const [errors, setErrors] = useState<ReturnType<typeof validateAgentForm>>({});
 
   const set = <K extends keyof AgentFormValues>(key: K, value: AgentFormValues[K]) =>
@@ -140,10 +259,11 @@ export function AgentForm({
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
-    const found = validateAgentForm(values, mode);
+    const submitted = { ...values, tools: resolvedTools };
+    const found = validateAgentForm(submitted, mode);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
-    onSubmit(values);
+    onSubmit(submitted);
   }
 
   const anyApproval = values.tools.some((tool) => tool.requiresApproval);
@@ -258,9 +378,20 @@ export function AgentForm({
           {tools.data && tools.data.length > 0 && (
             <ToolPicker
               tools={tools.data}
-              selected={values.tools}
+              selected={resolvedTools}
+              orgId={orgId}
+              integrations={{
+                items: integrations.data?.items,
+                loading: needsIntegrations && integrations.isPending && !integrations.error,
+                error: integrations.error,
+              }}
               onChange={(next) => set("tools", next)}
             />
+          )}
+          {errors.tools && (
+            <p role="alert" className="text-sm text-danger">
+              {errors.tools}
+            </p>
           )}
           <p className="text-xs text-muted-foreground">
             Approvals are not available yet. Until they are, a tool marked as needing approval is

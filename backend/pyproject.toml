@@ -16,6 +16,7 @@ dependencies = [
     "alembic>=1.14",
     "pyjwt[crypto]>=2.9",
     "cryptography>=44",
+    "httpcore>=1.0",
     "httpx>=0.27",
     "langgraph>=1.2.20",
     "jsonschema>=4.26.0",

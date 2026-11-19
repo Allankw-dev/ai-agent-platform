@@ -11,11 +11,13 @@ schema before a handler sees them (`validate_arguments`).
 
 import re
 import uuid
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from typing import Any
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass, field
+from typing import Any, Protocol
 
 from jsonschema import Draft202012Validator
+
+from app.models.enums import IntegrationProvider
 
 MAX_ERRORS_SHOWN = 3
 MAX_ERROR_CHARS = 500
@@ -33,12 +35,45 @@ class ToolArgumentsError(ToolError):
 
 
 @dataclass(frozen=True)
+class ResolvedIntegration:
+    """An integration as a tool handler sees it: its settings and, if one is saved, its secret.
+
+    The secret exists only inside this object, for the length of one tool call. It must never be
+    logged, recorded in a run step or returned to the model (the repr hides it on purpose).
+    """
+
+    id: uuid.UUID
+    provider: IntegrationProvider
+    name: str
+    config: dict[str, Any]
+    secret: str | None = field(default=None, repr=False)
+
+
+class IntegrationAccess(Protocol):
+    """How a handler reaches the integration its tool grant points at."""
+
+    async def resolve(
+        self, integration_id: object, provider: IntegrationProvider
+    ) -> ResolvedIntegration:
+        """The integration with its current settings and decrypted secret.
+
+        Raises ToolError (with a message safe to show) when it is missing, disabled, of the wrong
+        type, or its secret cannot be used.
+        """
+        ...
+
+
+@dataclass(frozen=True)
 class ToolContext:
     """Who a tool call is running for. Handlers must never act outside this organization."""
 
     org_id: uuid.UUID
     agent_id: uuid.UUID
     run_id: uuid.UUID
+    # How to reach this organization's integrations (None in tests that do not need them).
+    integrations: IntegrationAccess | None = None
+    # The settings of this agent's grant of the tool (for provider tools: {"integration_id": ...}).
+    tool_config: Mapping[str, Any] = field(default_factory=dict)
 
 
 ToolHandler = Callable[[dict[str, Any], ToolContext], Awaitable[dict[str, Any]]]

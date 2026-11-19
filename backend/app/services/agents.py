@@ -8,9 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.context import OrgContext
 from app.core.config import get_settings
 from app.core.errors import ApiError
-from app.models.agents import Agent, AgentTool, AgentVersion
-from app.models.enums import AgentStatus
+from app.models.agents import Agent, AgentTool, AgentVersion, Tool
+from app.models.enums import AgentStatus, IntegrationStatus
 from app.repositories import agents as agent_repo
+from app.repositories import integrations as integration_repo
 from app.repositories import tools as tool_repo
 from app.schemas.agent import (
     AgentConfig,
@@ -18,6 +19,7 @@ from app.schemas.agent import (
     AgentListItem,
     AgentRead,
     AgentUpdate,
+    ToolAssignmentIn,
     ToolAssignmentRead,
     VersionRead,
     VersionSummary,
@@ -36,7 +38,60 @@ def _name_taken() -> ApiError:
 # ---------- validation of a configuration against the platform's rules ----------
 
 
-async def _validate_config(session: AsyncSession, config: AgentConfig) -> dict[str, bool]:
+async def _check_tool_integration(
+    session: AsyncSession, org_id: uuid.UUID, tool: Tool, assignment: ToolAssignmentIn
+) -> None:
+    """A tool that talks to an outside service must point at an integration it can really use.
+
+    The grant's config is exactly {"integration_id": <uuid>}. The integration must belong to this
+    organization, be of the type the tool needs, and be active. (It is checked again each time the
+    tool runs, because an integration can be disabled or deleted after a version is saved.)
+    """
+    settings = assignment.config
+    if set(settings) - {"integration_id"}:
+        raise ApiError(
+            422,
+            "invalid_tool_config",
+            f"{tool.name} only accepts an integration_id setting.",
+        )
+    raw = settings.get("integration_id")
+    if raw in (None, ""):
+        raise ApiError(
+            422,
+            "integration_required",
+            f"{tool.name} needs an integration. Choose one in the tool's settings.",
+        )
+    try:
+        integration_id = uuid.UUID(str(raw))
+    except ValueError:
+        raise ApiError(
+            422, "invalid_tool_config", f"The integration chosen for {tool.name} is not valid."
+        ) from None
+    integration = await integration_repo.get(session, org_id, integration_id)
+    if integration is None:
+        raise ApiError(
+            422,
+            "integration_not_found",
+            f"The integration chosen for {tool.name} does not exist in this organization.",
+        )
+    if integration.provider is not tool.provider:
+        raise ApiError(
+            422,
+            "integration_wrong_type",
+            f"{tool.name} needs a {tool.provider.value if tool.provider else ''} integration, "
+            f"but “{integration.name}” is a different type.",
+        )
+    if integration.status is not IntegrationStatus.ACTIVE:
+        raise ApiError(
+            422,
+            "integration_disabled",
+            f"The integration “{integration.name}” is disabled. Enable it or choose another.",
+        )
+
+
+async def _validate_config(
+    session: AsyncSession, org_id: uuid.UUID, config: AgentConfig
+) -> dict[str, bool]:
     """Checks a configuration and returns {tool_key: effective requires_approval}."""
     settings = get_settings()
 
@@ -67,6 +122,11 @@ async def _validate_config(session: AsyncSession, config: AgentConfig) -> dict[s
     unknown = [key for key in keys if key not in catalog]
     if unknown:
         raise ApiError(422, "unknown_tool", f"Unknown tool: {', '.join(sorted(unknown))}.")
+
+    for assignment in config.tools:
+        definition = catalog[assignment.tool_key]
+        if definition.provider is not None:
+            await _check_tool_integration(session, org_id, definition, assignment)
 
     # A sensitive tool can never be switched to "run without approval".
     return {
@@ -137,6 +197,7 @@ async def _version_read(session: AsyncSession, version: AgentVersion) -> Version
                 tool_key=tool.key,
                 name=tool.name,
                 description=tool.description,
+                provider=tool.provider,
                 is_sensitive=tool.is_sensitive,
                 requires_approval=assignment.requires_approval,
                 config=assignment.config,
@@ -243,7 +304,7 @@ async def _add_agent(
 
 
 async def create_agent(session: AsyncSession, ctx: OrgContext, body: AgentCreate) -> AgentRead:
-    approvals = await _validate_config(session, body.config)
+    approvals = await _validate_config(session, ctx.org_id, body.config)
     agent = await _add_agent(session, ctx, body.name, body.description)
     version = await _insert_version(session, ctx, agent, body.config, approvals, "Initial version")
     agent.current_version_id = version.id
@@ -311,7 +372,7 @@ async def create_version(
     agent = await agent_repo.get(session, ctx.org_id, agent_id, lock=True)
     if agent is None:
         raise _not_found()
-    approvals = await _validate_config(session, config)
+    approvals = await _validate_config(session, ctx.org_id, config)
     version = await _insert_version(session, ctx, agent, config, approvals, change_note)
     previous = agent.current_version_id
     agent.current_version_id = version.id
@@ -394,7 +455,7 @@ async def duplicate(
             ],
         }
     )
-    approvals = await _validate_config(session, config)
+    approvals = await _validate_config(session, ctx.org_id, config)
 
     candidates = (
         [name]

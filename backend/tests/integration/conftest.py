@@ -147,6 +147,18 @@ def gemini_key(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 
 @pytest.fixture
+def vault_key(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    """Give the server a credential encryption key for the duration of a test."""
+    from app.core.vault import generate_key
+
+    key = generate_key()
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", key)
+    get_settings.cache_clear()
+    yield key
+    get_settings.cache_clear()
+
+
+@pytest.fixture
 async def workspace(api: "Api") -> "Workspace":
     from tests.integration.engine_helpers import ADMIN, DEV, MEMBER, OWNER, STRANGER, Workspace
 

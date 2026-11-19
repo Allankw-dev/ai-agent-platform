@@ -410,9 +410,12 @@ export function useCancelRun(orgId: string, runId: string) {
 
 // ---------- integrations ----------
 
-/** Only call this for people who may view integrations (the API refuses members). */
-export function useIntegrations(orgId: string, limit: number) {
-  const enabled = useEnabled();
+/**
+ * Only call this for people who may view integrations (the API refuses members). Pass
+ * `active = false` to skip the request when nothing on screen needs the list.
+ */
+export function useIntegrations(orgId: string, limit: number, active = true) {
+  const enabled = useEnabled() && active;
   return useQuery({
     queryKey: keys.integrationList(orgId, limit),
     queryFn: () =>

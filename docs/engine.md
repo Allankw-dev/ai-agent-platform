@@ -40,6 +40,8 @@ applied again when a run starts, so lowering one also constrains older versions.
 
 - Iterations, tokens and cost are checked **before each model call**, so a run can overshoot a
   token or cost limit by at most one call.
+- Each tool call gets a context with the run's ids, how to reach the organization's integrations
+  (`integrations`) and the settings of that agent's grant of the tool (`tool_config`).
 - The timeout wraps the whole run, including a model call that hangs. A run that fails mid-step (the
   time limit, a crash, an interrupted redelivery) also closes that step as failed, so no step is
   left showing "running" on a finished run.

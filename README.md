@@ -41,8 +41,8 @@ docker compose up -d --force-recreate api worker
 ## Status
 
 Phases 1 (foundation), 2 (accounts, organizations, roles, invitations) and 3 (agents, engine, runs)
-are complete. Phase 4 (tools and approvals) is in progress: step 4A, the credential vault and
-Integrations tab, is built. See `CLAUDE.md` for conventions and commands, and `docs/` for the
+are complete. Phase 4 (tools and approvals) is in progress: step 4A (credential vault, Integrations tab) is
+done and step 4B (HTTP tools) is built. See `CLAUDE.md` for conventions and commands, and `docs/` for the
 architecture, ER diagram and the Phase 4 design.
 
 ## Structure

@@ -27,6 +27,7 @@ function EditForm({ orgId, agent }: { orgId: string; agent: AgentRead }) {
   return (
     <AgentForm
       mode="edit"
+      orgId={orgId}
       initial={valuesFromAgent(agent)}
       submitLabel="Save changes"
       submittingLabel="Saving…"

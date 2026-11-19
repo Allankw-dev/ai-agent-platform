@@ -28,4 +28,4 @@ def registered_keys() -> frozenset[str]:
 
 
 # Importing the modules registers their handlers.
-from app.tools import builtin  # noqa: E402, F401
+from app.tools import builtin, http  # noqa: E402, F401

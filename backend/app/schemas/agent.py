@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models.enums import LLMProvider
+from app.models.enums import IntegrationProvider, LLMProvider
 
 NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$")
 TOOL_KEY_PATTERN = re.compile(r"^[a-z0-9_]+(\.[a-z0-9_]+)+$")
@@ -171,6 +171,8 @@ class ToolAssignmentRead(BaseModel):
     tool_key: str
     name: str
     description: str
+    # The integration type this tool needs (None for tools that need none).
+    provider: IntegrationProvider | None = None
     is_sensitive: bool
     requires_approval: bool
     config: dict[str, Any]
@@ -224,5 +226,7 @@ class ToolRead(BaseModel):
     name: str
     description: str
     input_schema: dict[str, Any]
+    # The integration type this tool needs (None for tools that need none).
+    provider: IntegrationProvider | None = None
     is_sensitive: bool
     timeout_seconds: int
