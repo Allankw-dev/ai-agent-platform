@@ -214,3 +214,57 @@ async def test_new_versions_check_the_integration_again_but_a_rollback_restores_
     assert rollback.status_code == 200
     (tool,) = rollback.json()["current_version"]["tools"]
     assert tool["config"] == {"integration_id": integration_id}
+
+
+# ---------- the Slack tool ----------
+
+
+async def test_the_catalog_lists_the_slack_tool(workspace: Workspace) -> None:
+    tools = {t["key"]: t for t in (await workspace.api.get(DEV, "/api/v1/tools")).json()}
+    slack = tools["slack.send_message"]
+    assert slack["provider"] == "slack" and slack["is_sensitive"] is True
+    schema = slack["input_schema"]
+    Draft202012Validator.check_schema(schema)
+    assert schema["required"] == ["channel", "text"]
+    assert schema["properties"]["text"]["maxLength"] == 3000
+    reduced = to_gemini_schema(schema)
+    assert reduced["type"] == "OBJECT" and _all_types_are_text(reduced)
+    assert set(reduced["properties"]) == {"channel", "text"}
+
+
+async def test_an_agent_can_be_given_the_slack_tool_with_a_slack_integration(
+    workspace: Workspace,
+) -> None:
+    slack_id = await integration(workspace, SLACK)
+    response = await save(workspace, grant("slack.send_message", integration_id=slack_id))
+    assert response.status_code == 201, response.text
+    (tool,) = response.json()["current_version"]["tools"]
+    assert (
+        tool["provider"] == "slack" and tool["requires_approval"] is True
+    )  # cannot be switched off
+
+
+async def test_the_slack_tool_needs_a_slack_integration(workspace: Workspace) -> None:
+    http_id = await integration(workspace, HTTP)
+    wrong = await save(workspace, grant("slack.send_message", integration_id=http_id))
+    assert await error_code(wrong) == "integration_wrong_type"
+    missing = await save(workspace, grant("slack.send_message"))
+    assert await error_code(missing) == "integration_required"
+
+
+async def test_each_tool_must_use_an_integration_of_its_own_type(workspace: Workspace) -> None:
+    http_id = await integration(workspace, HTTP)
+    slack_id = await integration(workspace, SLACK)
+    both = await save(
+        workspace,
+        grant("http.get", integration_id=http_id),
+        grant("slack.send_message", integration_id=slack_id),
+    )
+    assert both.status_code == 201
+    swapped = await save(
+        workspace,
+        grant("http.get", integration_id=slack_id),
+        grant("slack.send_message", integration_id=http_id),
+        name="Swapped",
+    )
+    assert swapped.status_code == 422

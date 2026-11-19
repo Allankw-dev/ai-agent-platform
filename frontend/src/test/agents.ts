@@ -73,6 +73,16 @@ export const HTTP_REQUEST: ToolInfo = {
   timeout_seconds: 20,
 };
 
+export const SLACK_SEND: ToolInfo = {
+  key: "slack.send_message",
+  name: "Send Slack message",
+  description: "Post a message to a Slack channel.",
+  input_schema: { type: "object" },
+  provider: "slack",
+  is_sensitive: true,
+  timeout_seconds: 15,
+};
+
 export const CATALOG = [CALCULATOR, CLOCK, SENDER];
 export const CATALOG_WITH_HTTP = [...CATALOG, HTTP_GET, HTTP_REQUEST];
 

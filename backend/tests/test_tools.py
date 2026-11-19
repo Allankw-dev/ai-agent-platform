@@ -49,6 +49,7 @@ def test_builtin_handlers_are_registered() -> None:
         "utility.calculate",
         "http.get",
         "http.request",
+        "slack.send_message",
     } <= registered_keys()
     assert get_handler("nope.nothing") is None
 

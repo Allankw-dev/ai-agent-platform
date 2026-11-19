@@ -9,7 +9,16 @@ import {
   type AgentFormValues,
 } from "@/features/agents/agent-form-model";
 import { apiError, apiFetch, routeApi } from "@/test/api-mock";
-import { agent, CATALOG, CATALOG_WITH_HTTP, pageOf, version } from "@/test/agents";
+import {
+  agent,
+  CATALOG,
+  CATALOG_WITH_HTTP,
+  pageOf,
+  SLACK_SEND,
+  version,
+  CALCULATOR,
+  HTTP_GET,
+} from "@/test/agents";
 import type { Integration } from "@/lib/api/types";
 import { resetAuth } from "@/test/auth-mock";
 import { renderWithQuery } from "@/test/render";
@@ -358,6 +367,43 @@ describe("AgentForm", () => {
       });
       renderForm({ mode: "edit", initial: valuesFromAgent(saved), submitLabel: "Save changes" });
       expect(await screen.findByText(/chosen earlier is disabled or deleted/)).toBeInTheDocument();
+    });
+
+    it("offers Slack integrations for the Slack tool, with their allowed channels", async () => {
+      routeApi({
+        "GET /tools": [CALCULATOR, HTTP_GET, SLACK_SEND],
+        [LIST]: pageOf([
+          stored({ id: "int-1", name: "Weather API" }),
+          stored({
+            id: "int-5",
+            provider: "slack",
+            name: "Team Slack",
+            config: { allowed_channels: ["C0123456789"] },
+          }),
+          stored({
+            id: "int-6",
+            provider: "slack",
+            name: "Ops Slack",
+            config: { allowed_channels: ["C0999999999", "G0888888888"] },
+          }),
+        ]),
+      });
+      const user = userEvent.setup();
+      renderForm();
+      await user.click(await screen.findByRole("checkbox", { name: "Send Slack message" }));
+      const choice = await screen.findByLabelText("Integration for Send Slack message");
+      expect(
+        within(choice)
+          .getAllByRole("option")
+          .map((option) => option.textContent),
+      ).toEqual(["Choose an integration…", "Team Slack", "Ops Slack"]);
+      await user.selectOptions(choice, "int-6");
+      expect(screen.getByText("Allowed channels: C0999999999, G0888888888")).toBeInTheDocument();
+      const approval = screen.getByRole("checkbox", {
+        name: "Require approval for Send Slack message",
+      });
+      expect(approval).toBeChecked();
+      expect(approval).toBeDisabled();
     });
 
     it("keeps the approval switch locked on for the write tool", async () => {

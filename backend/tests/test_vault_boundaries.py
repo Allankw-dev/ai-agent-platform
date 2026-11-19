@@ -7,6 +7,8 @@ response schema has a field that could carry a secret.
 import re
 from pathlib import Path
 
+import pytest
+
 from app.schemas.integration import IntegrationRead
 
 APP = Path(__file__).resolve().parents[1] / "app"
@@ -66,7 +68,9 @@ def test_only_tool_access_and_the_credentials_service_read_a_secret() -> None:
     assert callers == {"services/credentials.py", "tools/integration_access.py"}
 
 
-def test_the_http_tool_never_logs() -> None:
-    """The tool handles secrets, so it must not print or log anything itself."""
-    source = (APP / "tools" / "http.py").read_text()
+@pytest.mark.parametrize("name", ["http.py", "slack.py", "netsafety.py"])
+def test_the_tools_that_handle_secrets_never_log(name: str) -> None:
+    """These files see credentials or the requests that carry them, so they must not print or log
+    anything themselves."""
+    source = (APP / "tools" / name).read_text()
     assert "log." not in source and "logging" not in source and "print(" not in source

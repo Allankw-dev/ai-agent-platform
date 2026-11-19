@@ -1,7 +1,7 @@
 # Phase 4 design: credentials, real tools and approvals
 
 **Status: approved ("accept all", 2026-11-16). Step 4A (credential vault) is accepted; 4B (HTTP
-tools) is built and awaiting acceptance; 4C onwards are not started.** Section 0 records the decisions; the recommendation in
+tools) is accepted; 4C (Slack tool) is built and awaiting acceptance; 4D onwards are not started.** Section 0 records the decisions; the recommendation in
 bold is what was accepted.
 
 ## 0. Decisions
@@ -102,6 +102,14 @@ sensitive and always needs approval.
 
 ### 4.2 Slack (4C): `slack.send_message`
 
+> **As built.** Details and the Slack app setup steps are in `docs/slack-tool.md`. Additions to the
+> design: every tool can have an *argument preparer* that the engine runs after validation and
+> before execution; for Slack it makes the text inert (mentions neutralised, `<` and `>` escaped) and
+> is idempotent, so step 4D can store the prepared arguments in the approval and the approver sees
+> exactly what will be posted. Channels are Slack ids (not names), the host `slack.com` is fixed in
+> code, and Slack's answers are reduced to a safe, short result. Until approvals exist (4D) the engine
+> skips the tool, as it does for every tool that needs approval.
+
 - Sensitive, so it always needs approval.
 - The integration holds the bot token and `allowed_channels` (channel ids). A message to any other
   channel is refused before anything is sent.
@@ -155,11 +163,12 @@ stretch of work, and waiting time is not counted.
 - `GET /organizations/{org}/approvals?status=pending`, `GET /{id}`, `POST /{id}/approve`, `POST /{id}/reject`
 - The run detail gains its pending approval, so the run page can show it.
 
-### 5.5 Database changes (migration 0009)
+### 5.5 Database changes (migration 0010)
 
 `agent_runs.checkpoint` (JSON), a new step status `awaiting_approval`, and indexes for the approvals
-inbox. Everything else already exists. (Migrations 0006 to 0008 were used earlier: 0006 dropped the unused `agent_runs.thread_id`, 0007
-made credentials one-per-integration and added `set_by_id`, 0008 added the HTTP tools.)
+inbox. Everything else already exists. (Migrations 0006 to 0009 were used earlier: 0006 dropped the unused `agent_runs.thread_id`, 0007
+made credentials one-per-integration and added `set_by_id`, 0008 added the HTTP tools, 0009 the
+Slack tool.)
 
 ### 5.6 Screens
 
@@ -191,8 +200,8 @@ check before the next.
 | --- | --- | --- |
 | 4A (built) | Credential vault, integrations API and screen | Encryption, no-leak, roles, tenant isolation, audit |
 | 4B (built) | Address check, `http.get`, `http.request`, integration choice on the agent form | Every blocked address class, redirects, limits, allowlist |
-| 4C | `slack.send_message` | Channel allowlist, mention neutralising, mocked Slack |
-| 4D | Pause and resume, approvals API, expiry, migration 0009 | Double decide, expiry, cancel, at-most-once, resume races |
+| 4C (built) | `slack.send_message` | Channel allowlist, mention neutralising, mocked Slack |
+| 4D | Pause and resume, approvals API, expiry, migration 0010 | Double decide, expiry, cancel, at-most-once, resume races |
 | 4E | Approvals tab and run page states | Roles, decisions, empty and error states |
 | 4F | End-to-end acceptance on your machine | Approve, reject and expire, with a real Slack message |
 

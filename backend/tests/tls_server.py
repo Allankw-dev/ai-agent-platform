@@ -21,7 +21,7 @@ from cryptography.x509.oid import NameOID
 if TYPE_CHECKING:
     from app.tools.http import HttpFetcher
 
-HOSTS = ("api.example.com", "other.example.com", "evil.example.net")
+HOSTS = ("api.example.com", "other.example.com", "evil.example.net", "slack.com")
 
 
 @dataclass

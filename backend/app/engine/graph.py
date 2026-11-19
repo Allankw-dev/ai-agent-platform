@@ -36,7 +36,7 @@ from app.engine.llm import (
 from app.engine.pricing import cost_micro_usd
 from app.engine.recorder import MAX_TEXT_CHARS, RunRecorder, scrub
 from app.models.enums import StepStatus, StepType
-from app.tools import get_handler
+from app.tools import get_handler, prepare_arguments
 from app.tools.base import ToolContext, ToolDefinition, ToolError, validate_arguments
 
 log = structlog.get_logger()
@@ -224,7 +224,9 @@ def build_graph(deps: EngineDeps) -> Any:
         try:
             if handler is None:
                 raise ToolError("This tool is not implemented yet.")
-            validated = validate_arguments(tool.input_schema, call.args)
+            validated = prepare_arguments(
+                tool.key, validate_arguments(tool.input_schema, call.args)
+            )
             async with asyncio.timeout(tool.timeout_seconds):
                 context = replace(deps.context, tool_config=tool.config or {})
                 result = await handler(validated, context)
