@@ -82,6 +82,25 @@ describe("StepTimeline", () => {
     expect(summary.textContent?.endsWith("…")).toBe(true);
   });
 
+  it("shows a tool call that is waiting for a person's decision", () => {
+    render(
+      <StepTimeline
+        steps={[
+          step(0, {
+            step_type: "tool_call",
+            status: "awaiting_approval",
+            tool_key: "slack.send_message",
+            name: "slack.send_message",
+            finished_at: null,
+            output: null,
+          }),
+        ]}
+      />,
+    );
+    expect(within(item(1)).getByText("Waiting for approval")).toBeInTheDocument();
+    expect(within(item(1)).getByText("slack.send_message")).toBeInTheDocument();
+  });
+
   it("copes with a step that is still running", () => {
     render(
       <StepTimeline

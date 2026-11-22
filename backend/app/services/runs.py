@@ -14,8 +14,10 @@ from app.db.tenancy import use_tenant
 from app.models.enums import AgentStatus, LLMProvider, RunStatus, RunTrigger
 from app.models.runs import AgentRun, RunStep
 from app.repositories import agents as agent_repo
+from app.repositories import approvals as approval_repo
 from app.repositories import runs as run_repo
 from app.schemas.run import RunCreate, RunDetail, RunRead, RunStepRead
+from app.services import approvals as approval_service
 from app.services import audit
 
 log = structlog.get_logger()
@@ -84,7 +86,12 @@ def step_read(step: RunStep) -> RunStepRead:
 
 
 async def reap_orphaned_runs(session: AsyncSession, ctx: OrgContext) -> None:
-    """Close orphaned runs on reads, without committing the request's transaction."""
+    """Keep runs honest on reads, without committing the request's transaction.
+
+    Closes runs whose worker is gone, and expires approvals nobody decided in time (which stops
+    their runs), so a run list never shows a stale "waiting" or "running".
+    """
+    await approval_service.sweep(session, ctx)
     cutoff = run_repo.orphan_cutoff(get_settings().agent_timeout_ceiling_seconds)
     maintenance_sessions = async_sessionmaker(bind=session.bind, expire_on_commit=False)
     async with maintenance_sessions() as maintenance_session:
@@ -100,8 +107,16 @@ async def get_run_detail(session: AsyncSession, ctx: OrgContext, run_id: uuid.UU
         raise ApiError(404, "run_not_found", "Run not found.")
     number, agent_name = await run_repo.labels(session, run)
     steps = await run_repo.list_steps(session, run.id)
+    waiting = None
+    if run.status is RunStatus.AWAITING_APPROVAL:
+        pending = await approval_repo.pending_for_run(session, run.id)
+        if pending is not None:
+            row = await approval_repo.get_row(session, ctx.org_id, pending.id)
+            waiting = approval_service.summary_of(row) if row else None
     return RunDetail(
-        **run_read(run, number, agent_name).model_dump(), steps=[step_read(s) for s in steps]
+        **run_read(run, number, agent_name).model_dump(),
+        steps=[step_read(s) for s in steps],
+        pending_approval=waiting,
     )
 
 
@@ -207,6 +222,18 @@ async def cancel_run(session: AsyncSession, ctx: OrgContext, run_id: uuid.UUID) 
         raise ApiError(404, "run_not_found", "Run not found.")
     if not await run_repo.cancel(session, ctx.org_id, run_id):
         raise ApiError(409, "run_not_cancellable", "This run has already finished.")
+    # Nobody should be asked to approve an action of a run that no longer exists.
+    for approval_id in await approval_repo.cancel_for_run(session, ctx.org_id, run_id):
+        await audit.record(
+            session,
+            org_id=ctx.org_id,
+            actor_id=ctx.user.id,
+            action="approval.cancelled",
+            resource_type="approval",
+            resource_id=approval_id,
+            details={"run_id": str(run_id)},
+        )
+    await run_repo.end_awaiting_steps(session, [run_id], approval_service.ENDED_STEP)
     await audit.record(
         session,
         org_id=ctx.org_id,

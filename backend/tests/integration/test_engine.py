@@ -220,7 +220,7 @@ async def test_a_real_tool_the_agent_was_not_given_is_refused(
     assert step["output"] is None
 
 
-async def test_a_tool_that_needs_approval_is_not_run(
+async def test_a_tool_that_needs_approval_pauses_the_run_instead_of_running(
     workspace: Workspace, runtime_maker: Maker
 ) -> None:
     llm = ScriptedLLM(call_tools(("utility_calculate", {"expression": "1+1"})), reply("ok"))
@@ -230,11 +230,11 @@ async def test_a_tool_that_needs_approval_is_not_run(
         llm,
         tools=[{"tool_key": "utility.calculate", "requires_approval": True}],
     )
+    assert run["status"] == "awaiting_approval"  # waiting for a person, holding no worker
     (step,) = tool_steps(run)
-    assert step["status"] == "skipped"
-    assert "approval" in step["error"]
+    assert step["status"] == "awaiting_approval"
     assert step["output"] is None  # the handler never ran
-    assert llm.requests[1]["messages"][-1]["results"][0]["is_error"] is True
+    assert llm.calls == 1  # the model is not asked again until a person decides
 
 
 async def test_tool_failures_never_leak_internals(

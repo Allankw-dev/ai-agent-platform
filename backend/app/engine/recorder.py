@@ -8,6 +8,7 @@ is the organization only (a worker acts for the organization, not for a user).
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func, select, update
@@ -18,8 +19,26 @@ from app.engine.pricing import micro_to_usd
 from app.models.enums import RunStatus, StepStatus, StepType
 from app.models.runs import AgentRun, RunStep
 from app.models.usage import UsageRecord
+from app.repositories import approvals as approval_repo
+from app.services import audit
 
 MAX_TEXT_CHARS = 20_000
+MAX_REASONING_CHARS = 1_000
+
+
+def strip_nul(value: Any) -> Any:
+    """Remove NUL characters (which JSONB rejects) without changing anything else.
+
+    Unlike `scrub` this never shortens text, so it is safe for data that must come back exactly as
+    it went in: the arguments of an action a person approves, and the saved conversation.
+    """
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, dict):
+        return {str(strip_nul(k)): strip_nul(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [strip_nul(v) for v in value]
+    return value
 
 
 def scrub(value: Any) -> Any:
@@ -108,6 +127,66 @@ class RunRecorder:
                 )
             )
             await session.commit()
+
+    async def request_approval(
+        self,
+        *,
+        step_id: uuid.UUID,
+        tool_key: str,
+        proposed_input: dict[str, Any],
+        reasoning_summary: str | None,
+        expires_at: datetime,
+    ) -> uuid.UUID:
+        """Ask a person to approve an action, and mark its step as waiting for the decision.
+
+        `proposed_input` is stored exactly (never shortened): it is what the person sees, and it is
+        what runs if they approve.
+        """
+        reason = strip_nul(reasoning_summary)[:MAX_REASONING_CHARS] if reasoning_summary else None
+        async with self._session() as session:
+            approval = await approval_repo.create(
+                session,
+                org_id=self._org_id,
+                run_id=self._run_id,
+                run_step_id=step_id,
+                tool_key=tool_key,
+                proposed_input=strip_nul(proposed_input),
+                reasoning_summary=reason or None,
+                expires_at=expires_at,
+            )
+            await session.execute(
+                update(RunStep)
+                .where(RunStep.id == step_id)
+                .values(status=StepStatus.AWAITING_APPROVAL)
+            )
+            await audit.record(
+                session,
+                org_id=self._org_id,
+                actor_id=None,
+                action="approval.requested",
+                resource_type="approval",
+                resource_id=approval.id,
+                details={"run_id": str(self._run_id), "tool_key": tool_key},
+            )
+            await session.commit()
+            return approval.id
+
+    async def mark_step_running(self, step_id: uuid.UUID) -> bool:
+        """Mark an approved action as started. False if it was not waiting any more.
+
+        This is written before the action runs, so if the worker dies mid-action the run can say
+        plainly that it is unknown whether the action happened (and never retries it).
+        """
+        async with self._session() as session:
+            result = await session.execute(
+                update(RunStep)
+                .where(RunStep.id == step_id, RunStep.status == StepStatus.AWAITING_APPROVAL)
+                .values(status=StepStatus.RUNNING)
+                .returning(RunStep.id)
+            )
+            started = result.first() is not None
+            await session.commit()
+            return started
 
     async def record_usage(
         self, *, model: str, input_tokens: int, output_tokens: int, cost_micro_usd: int

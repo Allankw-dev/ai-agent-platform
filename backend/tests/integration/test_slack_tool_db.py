@@ -1,8 +1,8 @@
-"""The Slack tool with the real vault and database, and the engine's argument-preparation step.
+"""The Slack tool with the real vault and database, approvals, and argument preparation.
 
-The Slack tool is sensitive, so inside a run it is skipped until approvals exist (step 4D). These
-tests therefore call the handler directly with the real integration lookup, and separately check
-that a run never sends anything.
+The Slack tool is sensitive: inside a run it pauses for a person's approval, and only an approved
+message is posted. Some tests call the handler directly with the real integration lookup; others
+run the whole thing (pause, decide, resume) against a local stand-in for slack.com.
 """
 
 import json
@@ -23,6 +23,7 @@ from app.tools import slack as slack_tools
 from app.tools.base import ToolContext, ToolError
 from app.tools.integration_access import DatabaseIntegrationAccess
 from tests.fakes import ScriptedLLM, call_tools, reply
+from tests.integration.approval_helpers import decide, resume, waiting
 from tests.integration.engine_helpers import ADMIN, Queue, Workspace
 from tests.tls_server import LocalHttpsServer, Reply, local_fetcher
 
@@ -202,25 +203,86 @@ def tool_step(run: dict[str, Any]) -> dict[str, Any]:
     return found
 
 
-async def test_in_a_run_the_slack_tool_waits_for_approval_and_sends_nothing(
+def post_call(text: str = "@channel hello <!here>") -> tuple[str, dict[str, Any]]:
+    return ("slack_send_message", {"channel": CHANNEL.lower(), "text": text})
+
+
+async def test_a_slack_message_waits_for_a_person_who_sees_the_exact_final_text(
     workspace: Workspace, runtime_maker: Maker, server: LocalHttpsServer
 ) -> None:
-    """Posting always needs a person; until approvals exist (4D) the request is skipped."""
     integration_id = await make_integration(workspace)
-    llm = ScriptedLLM(
-        call_tools(("slack_send_message", {"channel": CHANNEL, "text": "@channel hello"})),
-        reply("I could not post it."),
-    )
+    llm = ScriptedLLM(call_tools(post_call()), reply("Posted."))
     run = await run_agent(
         workspace,
         runtime_maker,
         llm,
         [{"tool_key": "slack.send_message", "config": {"integration_id": integration_id}}],
     )
-    step = tool_step(run)
-    assert step["status"] == "skipped" and "approval" in step["error"]
+
+    assert run["status"] == "awaiting_approval" and server.seen == []
+    approval = await waiting(workspace, run["id"])
+    shown = approval["proposed_input"]
+    assert shown["channel"] == CHANNEL  # normalised
+    assert "<" not in shown["text"] and ">" not in shown["text"]  # markup made inert
+    assert shown["text"].replace("\u200b", "") == "@channel hello &lt;!here&gt;"
+    assert TOKEN not in json.dumps(approval) and TOKEN not in json.dumps(run)
+
+    assert (await decide(workspace, approval["id"])).status_code == 200
     assert server.seen == []
-    assert TOKEN not in json.dumps(run) and TOKEN not in json.dumps(llm.requests, default=str)
+    await resume(workspace, runtime_maker, llm, run["id"])
+
+    (seen,) = server.seen  # posted once, and what was posted is what the person saw
+    body = json.loads(seen.body)
+    assert body["channel"] == shown["channel"] and body["text"] == shown["text"]
+    assert seen.headers["authorization"] == f"Bearer {TOKEN}"
+    done = await workspace.detail(run["id"])
+    assert done["status"] == "succeeded"
+    assert tool_step(done)["output"]["ok"] is True
+    assert TOKEN not in json.dumps(done) and TOKEN not in json.dumps(llm.requests, default=str)
+
+
+async def test_a_rejected_slack_message_is_never_posted(
+    workspace: Workspace, runtime_maker: Maker, server: LocalHttpsServer
+) -> None:
+    integration_id = await make_integration(workspace)
+    llm = ScriptedLLM(call_tools(post_call("hello team")), reply("I did not post it."))
+    run = await run_agent(
+        workspace,
+        runtime_maker,
+        llm,
+        [{"tool_key": "slack.send_message", "config": {"integration_id": integration_id}}],
+    )
+    approval = await waiting(workspace, run["id"])
+    await decide(workspace, approval["id"], "reject", note="Wrong channel")
+    await resume(workspace, runtime_maker, llm, run["id"])
+    assert server.seen == []
+    done = await workspace.detail(run["id"])
+    assert done["status"] == "succeeded" and tool_step(done)["status"] == "skipped"
+
+
+async def test_a_channel_that_is_not_allowed_fails_after_approval_without_sending(
+    workspace: Workspace, runtime_maker: Maker, server: LocalHttpsServer
+) -> None:
+    """The check happens when the action runs, so an edit made while waiting still applies."""
+    integration_id = await make_integration(workspace)
+    llm = ScriptedLLM(call_tools(post_call("hello")), reply("It was refused."))
+    run = await run_agent(
+        workspace,
+        runtime_maker,
+        llm,
+        [{"tool_key": "slack.send_message", "config": {"integration_id": integration_id}}],
+    )
+    approval = await waiting(workspace, run["id"])
+    await workspace.api.patch(
+        ADMIN,
+        f"{workspace.base}/integrations/{integration_id}",
+        json={"config": {"allowed_channels": ["C0999999999"]}},
+    )
+    await decide(workspace, approval["id"])
+    await resume(workspace, runtime_maker, llm, run["id"])
+    step = tool_step(await workspace.detail(run["id"]))
+    assert step["status"] == "failed" and "not allowed by this integration" in step["error"]
+    assert server.seen == []
 
 
 # ---------- the engine prepares arguments before a tool runs ----------

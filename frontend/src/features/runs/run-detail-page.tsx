@@ -42,7 +42,9 @@ function Outcome({ run }: { run: RunDetail }) {
           label={
             run.status === "queued"
               ? "Waiting for a worker to pick this up"
-              : "The agent is working"
+              : run.status === "awaiting_approval"
+                ? "Waiting for a person to approve or reject an action"
+                : "The agent is working"
           }
         />
         <p className="text-xs text-muted-foreground">This page updates by itself.</p>
@@ -157,6 +159,19 @@ export function RunDetailPage() {
       </div>
 
       <ErrorNotice error={cancel.error ?? again.error} />
+
+      {data.status === "awaiting_approval" && (
+        <Alert variant="info">
+          This run is paused until an owner or admin approves or rejects the action
+          {data.pending_approval ? ` ${data.pending_approval.tool_key}` : ""}. Nothing runs until
+          then.
+          {data.pending_approval?.expires_at
+            ? ` The request expires ${formatDateTime(data.pending_approval.expires_at)}.`
+            : ""}{" "}
+          The approval screens arrive in the next update; until then an owner or admin decides
+          through the API.
+        </Alert>
+      )}
 
       <Card>
         <CardHeader>

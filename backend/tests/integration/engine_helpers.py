@@ -29,12 +29,20 @@ class Queue:
     """Records (run_id, org_id) hand-offs instead of talking to Celery."""
 
     calls: list[tuple[uuid.UUID, uuid.UUID]] = field(default_factory=list)
+    # Hand-offs of decided runs back to a worker (agents.resume_run).
+    resumes: list[tuple[uuid.UUID, uuid.UUID]] = field(default_factory=list)
     fail: bool = False
+    fail_resume: bool = False
 
     async def dispatch(self, run_id: uuid.UUID, org_id: uuid.UUID) -> None:
         if self.fail:
             raise RuntimeError("the broker is down")
         self.calls.append((run_id, org_id))
+
+    async def dispatch_resume(self, run_id: uuid.UUID, org_id: uuid.UUID) -> None:
+        if self.fail_resume:
+            raise RuntimeError("the broker is down")
+        self.resumes.append((run_id, org_id))
 
 
 @dataclass

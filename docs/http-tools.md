@@ -7,7 +7,7 @@ for how secrets are stored.
 | Tool | Does | Approval |
 | --- | --- | --- |
 | `http.get` | GET a URL and return its text or JSON | No |
-| `http.request` | POST, PUT, PATCH or DELETE, and return the reply | Always (sensitive). Until approvals are built (step 4D) the engine skips it. |
+| `http.request` | POST, PUT, PATCH or DELETE, and return the reply | Always (sensitive): the run pauses until a person approves it (`docs/approvals.md`). |
 
 ## Setting it up
 

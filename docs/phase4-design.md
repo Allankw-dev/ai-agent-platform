@@ -1,7 +1,7 @@
 # Phase 4 design: credentials, real tools and approvals
 
 **Status: approved ("accept all", 2026-11-16). Step 4A (credential vault) is accepted; 4B (HTTP
-tools) is accepted; 4C (Slack tool) is built and awaiting acceptance; 4D onwards are not started.** Section 0 records the decisions; the recommendation in
+tools) is accepted; 4C (Slack tool) is accepted; 4D (approvals backend) is built and awaiting acceptance; 4E onwards are not started.** Section 0 records the decisions; the recommendation in
 bold is what was accepted.
 
 ## 0. Decisions
@@ -121,6 +121,19 @@ sensitive and always needs approval.
 
 ## 5. Approvals (4D backend, 4E screens)
 
+> **As built (4D).** The full description, rules and failure handling are in `docs/approvals.md`.
+> Where the build settled something the design left open: the approval and its run step are one
+> tool step that moves `running` -> `awaiting_approval` -> `running` or `skipped`; approvals gained a
+> `cancelled` status (a run that ends first); runs gained `checkpoint` and `last_resumed_at` (the
+> time limit and orphan check count from the last resume); the arguments live only in the approval
+> and the action runs from there, re-checked, and refused if checking would change them; a resume
+> claim locks the run row, so duplicate or late resume tasks do nothing; a worker that dies during
+> an approved action leaves the run failed with "unknown whether the action happened" and is never
+> retried; the same decision pressed again while the run still waits hands it over again (the
+> recovery when the queue was down, `503 queue_unavailable`); expiry and cancelled-run cleanup run
+> whenever approvals or runs are read or decided, with no scheduler. Deciding is by owners and
+> admins (developers can view); self-approval is allowed, as decided in section 0.
+
 ### 5.1 Flow
 
 1. The model asks for a tool that needs approval. The engine validates the arguments exactly as it
@@ -201,7 +214,7 @@ check before the next.
 | 4A (built) | Credential vault, integrations API and screen | Encryption, no-leak, roles, tenant isolation, audit |
 | 4B (built) | Address check, `http.get`, `http.request`, integration choice on the agent form | Every blocked address class, redirects, limits, allowlist |
 | 4C (built) | `slack.send_message` | Channel allowlist, mention neutralising, mocked Slack |
-| 4D | Pause and resume, approvals API, expiry, migration 0010 | Double decide, expiry, cancel, at-most-once, resume races |
+| 4D (built) | Pause and resume, approvals API, expiry, migration 0010 | Double decide, expiry, cancel, at-most-once, resume races |
 | 4E | Approvals tab and run page states | Roles, decisions, empty and error states |
 | 4F | End-to-end acceptance on your machine | Approve, reject and expire, with a real Slack message |
 

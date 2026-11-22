@@ -5,7 +5,8 @@ integration**, which holds the bot token (saved in the vault, see `docs/credenti
 channels that may be posted to.
 
 Posting sends a real message to real people, so the tool is **sensitive: it always needs a person's
-approval.** Until approvals exist (step 4D) the engine skips it and nothing is sent.
+approval** (`docs/approvals.md`): the run pauses, a person sees the exact channel and text, and the
+message is posted only after they approve.
 
 ## Setting it up
 
@@ -45,8 +46,8 @@ approval.** Until approvals exist (step 4D) the engine skips it and nothing is s
 
 The engine runs each tool's *argument preparer* after the arguments pass the schema and before the
 tool runs. For Slack it produces the channel and text exactly as they will be sent. Preparing twice
-changes nothing, so the handler can safely prepare again. Step 4D records the prepared arguments in
-the approval, and the approval screens show them, so what a person approves is what is posted.
+changes nothing, so the handler can safely prepare again. The approval records the prepared
+arguments and shows them, so what a person approves is what is posted.
 
 ## Where the code is
 

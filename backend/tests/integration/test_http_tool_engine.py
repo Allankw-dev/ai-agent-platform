@@ -21,6 +21,7 @@ from app.tools import http as http_tools
 from app.tools.base import ToolError
 from app.tools.integration_access import DatabaseIntegrationAccess
 from tests.fakes import ScriptedLLM, call_tools, reply
+from tests.integration.approval_helpers import decide, resume, waiting
 from tests.integration.engine_helpers import ADMIN, Queue, Workspace
 from tests.tls_server import LocalHttpsServer, Reply, Seen, local_fetcher
 
@@ -239,25 +240,70 @@ async def test_editing_the_allowed_hosts_takes_effect_on_saved_agents(
     assert server.seen == []
 
 
-async def test_a_write_tool_waits_for_approvals_and_sends_nothing(
+def write_call() -> tuple[str, dict[str, Any]]:
+    return (
+        "http_request",
+        {"method": "POST", "url": f"https://{HOST}/orders", "body": '{"qty": 1}'},
+    )
+
+
+async def test_a_write_request_waits_for_a_person_and_sends_nothing_until_approved(
     workspace: Workspace, runtime_maker: Maker, server: LocalHttpsServer
 ) -> None:
-    """http.request always needs approval, and approvals arrive in a later step: until then the
-    request is skipped, never sent."""
+    """http.request always needs approval: nothing is sent while a person has not decided."""
+    server.on("/orders", Reply(status=201, body='{"id": 7}'))
+    integration_id = await make_integration(workspace)
+    llm = ScriptedLLM(call_tools(write_call()), reply("The order was placed."))
+    run = await run_agent(workspace, runtime_maker, llm, [grant(integration_id, "http.request")])
+
+    assert run["status"] == "awaiting_approval" and server.seen == []
+    approval = await waiting(workspace, run["id"])
+    assert approval["tool_key"] == "http.request"
+    assert approval["proposed_input"]["body"] == '{"qty": 1}'  # exactly what would be sent
+    assert SECRET not in json.dumps(approval) and SECRET not in json.dumps(run)
+
+    assert (await decide(workspace, approval["id"])).status_code == 200
+    assert server.seen == []  # deciding alone sends nothing: the worker does, once, after
+    await resume(workspace, runtime_maker, llm, run["id"])
+
+    (seen,) = server.seen  # sent exactly once, as approved, with the credential added by us
+    assert (seen.method, seen.target, seen.body) == ("POST", "/orders", b'{"qty": 1}')
+    assert seen.headers["authorization"] == f"Bearer {SECRET}"
+    done = await workspace.detail(run["id"])
+    assert done["status"] == "succeeded" and tool_step(done)["output"]["status"] == 201
+    assert SECRET not in json.dumps(done) and SECRET not in json.dumps(llm.requests, default=str)
+
+
+async def test_a_rejected_write_request_is_never_sent(
+    workspace: Workspace, runtime_maker: Maker, server: LocalHttpsServer
+) -> None:
     server.on("/orders", Reply(status=201, body="{}"))
     integration_id = await make_integration(workspace)
-    llm = ScriptedLLM(
-        call_tools(
-            (
-                "http_request",
-                {"method": "POST", "url": f"https://{HOST}/orders", "body": '{"qty": 1}'},
-            )
-        ),
-        reply("I could not place the order."),
-    )
+    llm = ScriptedLLM(call_tools(write_call()), reply("I did not place the order."))
     run = await run_agent(workspace, runtime_maker, llm, [grant(integration_id, "http.request")])
-    step = tool_step(run)
-    assert step["status"] == "skipped" and "approval" in step["error"]
+    approval = await waiting(workspace, run["id"])
+    await decide(workspace, approval["id"], "reject", note="Not now")
+    await resume(workspace, runtime_maker, llm, run["id"])
+    assert server.seen == []
+    done = await workspace.detail(run["id"])
+    assert done["status"] == "succeeded" and tool_step(done)["status"] == "skipped"
+
+
+async def test_an_integration_disabled_while_waiting_stops_the_approved_request(
+    workspace: Workspace, runtime_maker: Maker, server: LocalHttpsServer
+) -> None:
+    """An approval is permission to act, not a promise the integration still exists."""
+    integration_id = await make_integration(workspace)
+    llm = ScriptedLLM(call_tools(write_call()), reply("It could not be sent."))
+    run = await run_agent(workspace, runtime_maker, llm, [grant(integration_id, "http.request")])
+    approval = await waiting(workspace, run["id"])
+    await workspace.api.patch(
+        ADMIN, f"{workspace.base}/integrations/{integration_id}", json={"status": "disabled"}
+    )
+    await decide(workspace, approval["id"])
+    await resume(workspace, runtime_maker, llm, run["id"])
+    step = tool_step(await workspace.detail(run["id"]))
+    assert step["status"] == "failed" and "is disabled" in step["error"]
     assert server.seen == []
 
 

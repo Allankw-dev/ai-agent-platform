@@ -51,6 +51,11 @@ class AgentRun(UUIDPrimaryKeyMixin, TenantMixin, Base):
     created_at: Mapped[datetime] = now_column()
     started_at: Mapped[datetime | None] = nullable_timestamp()
     finished_at: Mapped[datetime | None] = nullable_timestamp()
+    # While a run waits for a person: the saved state of the agent loop (see docs/approvals.md).
+    checkpoint: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    # When the current stretch of work began after a pause. Waiting time is not work time, so the
+    # orphan check and the time limit count from here, not from `started_at`.
+    last_resumed_at: Mapped[datetime | None] = nullable_timestamp()
 
     __table_args__ = (
         tenant_fk("agent_id", "agents"),
@@ -114,4 +119,12 @@ class Approval(UUIDPrimaryKeyMixin, TenantMixin, Base):
         tenant_fk("run_id", "agent_runs", ondelete="CASCADE"),
         tenant_fk("run_step_id", "run_steps"),
         Index("ix_approvals_org_id_status", "org_id", "status"),
+        Index("ix_approvals_org_id_requested_at", "org_id", "requested_at"),
+        # A run waits on one person's decision at a time.
+        Index(
+            "uq_approvals_one_pending_per_run",
+            "run_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
     )

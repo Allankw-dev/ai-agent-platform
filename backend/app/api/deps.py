@@ -19,6 +19,7 @@ from app.db.tenancy import use_tenant
 from app.models.identity import User
 from app.repositories import members as member_repo
 from app.services import auth as auth_service
+from app.services.approvals import ResumeDispatcher, celery_resume_dispatcher
 from app.services.runs import Dispatcher, celery_dispatcher
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -142,3 +143,11 @@ def get_run_dispatcher() -> Dispatcher:
 
 
 RunDispatcher = Annotated[Dispatcher, Depends(get_run_dispatcher)]
+
+
+def get_resume_dispatcher() -> ResumeDispatcher:
+    """Overridden in tests so no broker is needed."""
+    return celery_resume_dispatcher
+
+
+ResumeDispatcherDep = Annotated[ResumeDispatcher, Depends(get_resume_dispatcher)]

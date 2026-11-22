@@ -138,7 +138,7 @@ export type AgentConfigInput = {
 export type RunStatus =
   "queued" | "running" | "awaiting_approval" | "succeeded" | "failed" | "cancelled";
 export type StepType = "llm_call" | "tool_call" | "approval" | "error";
-export type StepStatus = "running" | "succeeded" | "failed" | "skipped";
+export type StepStatus = "running" | "awaiting_approval" | "succeeded" | "failed" | "skipped";
 
 export type RunRead = {
   id: string;
@@ -176,7 +176,20 @@ export type RunStepRead = {
   finished_at: string | null;
 };
 
-export type RunDetail = RunRead & { steps: RunStepRead[] };
+/** What a run page needs to say a run is waiting for a person, and for how long. */
+export type ApprovalSummary = {
+  id: string;
+  tool_key: string;
+  requested_at: string;
+  expires_at: string | null;
+  seconds_left: number | null;
+};
+
+export type RunDetail = RunRead & {
+  steps: RunStepRead[];
+  /** Set while the run waits for a person to approve or reject an action. */
+  pending_approval?: ApprovalSummary | null;
+};
 
 // ---------- integrations ----------
 

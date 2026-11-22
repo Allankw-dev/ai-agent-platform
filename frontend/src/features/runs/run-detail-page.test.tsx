@@ -94,6 +94,36 @@ describe("RunDetailPage", () => {
     expect(screen.getByText("In progress")).toBeInTheDocument();
   });
 
+  it("says plainly that a paused run waits for a person, and what it waits on", async () => {
+    routeApi({
+      [`GET ${RUN}`]: runDetail({
+        status: "awaiting_approval",
+        output: null,
+        finished_at: null,
+        pending_approval: {
+          id: "appr-1",
+          tool_key: "slack.send_message",
+          requested_at: "2026-11-20T09:00:00Z",
+          expires_at: "2026-11-21T09:00:00Z",
+          seconds_left: 80_000,
+        },
+      }),
+    });
+    renderRun();
+    expect(
+      await screen.findByText(/paused until an owner or admin approves or rejects the action/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/slack\.send_message/, { selector: "div" })).toBeInTheDocument();
+    expect(screen.getByText(/The request expires/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Waiting for a person to approve or reject an action/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("The agent is working")).not.toBeInTheDocument();
+    // A waiting run is still in progress: it can be cancelled and the page keeps updating.
+    expect(screen.getByRole("button", { name: "Cancel run" })).toBeInTheDocument();
+    expect(screen.getByText("This page updates by itself.")).toBeInTheDocument();
+  });
+
   it("warns when a queued run has been waiting a long time, and not before", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const queued = runDetail({

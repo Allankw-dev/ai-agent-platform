@@ -5,6 +5,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import RunStatus, RunTrigger, StepStatus, StepType
+from app.schemas.approval import ApprovalSummary
 
 
 class RunCreate(BaseModel):
@@ -58,3 +59,5 @@ class RunStepRead(BaseModel):
 
 class RunDetail(RunRead):
     steps: list[RunStepRead]
+    # Set while the run waits for a person's decision.
+    pending_approval: ApprovalSummary | None = None

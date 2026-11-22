@@ -25,12 +25,13 @@ Model-chosen tool calls are never trusted. In order, a call is turned into an er
 model (never an action) if:
 
 1. the tool is not one this agent version was given (including names the model invented);
-2. the tool needs a person's approval (sensitive tools always do): **approvals are Phase 4, so
-   for now such a call is skipped and the model is told it was not run**;
-3. there is no handler for it yet;
-4. the arguments do not match the tool's JSON schema (`jsonschema`);
-5. the handler runs longer than the tool's timeout, or raises. The model and the user only see a
+2. there is no handler for it yet;
+3. the arguments do not match the tool's JSON schema (`jsonschema`);
+4. the handler runs longer than the tool's timeout, or raises. The model and the user only see a
    generic message; details go to the logs.
+
+Only after checks 1 to 3 pass does the engine consider approval: a tool that needs a person's
+approval (sensitive tools always do) **pauses the run** instead of running. See `docs/approvals.md`.
 
 ## Limits
 
@@ -42,6 +43,11 @@ applied again when a run starts, so lowering one also constrains older versions.
   token or cost limit by at most one call.
 - After a tool's arguments pass its schema, an optional per-tool *preparer* turns them into their final
   form (for Slack, the message text made inert) before the tool runs; see `docs/slack-tool.md`.
+- **Pause and resume.** When an action needs approval the graph ends early; the executor saves the
+  loop's state as a checkpoint on the run and sets it `awaiting_approval`. `resume_run` (Celery task
+  `agents.resume_run`) claims the run once the approval is decided, restarts the graph at the tools
+  node with the decision, and continues. Repeated or late resume tasks are harmless. The time limit
+  and orphan check count from the last resume.
 - Each tool call gets a context with the run's ids, how to reach the organization's integrations
   (`integrations`) and the settings of that agent's grant of the tool (`tool_config`).
 - The timeout wraps the whole run, including a model call that hangs. A run that fails mid-step (the
@@ -138,6 +144,5 @@ because retrying would only use up the run's time limit.
 
 ## Not yet
 
-- Approvals (Phase 4): sensitive tools are skipped, not paused.
 - Conversation memory: `memory_config` is stored on versions but runs are single-turn.
 - Streaming output, retries of failed runs, schedules and webhooks.

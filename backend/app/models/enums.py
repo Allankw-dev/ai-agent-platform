@@ -59,6 +59,7 @@ class StepType(enum.StrEnum):
 
 class StepStatus(enum.StrEnum):
     RUNNING = "running"
+    AWAITING_APPROVAL = "awaiting_approval"  # a tool call waiting for a person to decide
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     SKIPPED = "skipped"
@@ -69,6 +70,7 @@ class ApprovalStatus(enum.StrEnum):
     APPROVED = "approved"
     REJECTED = "rejected"
     EXPIRED = "expired"
+    CANCELLED = "cancelled"  # the run was cancelled or ended before anyone decided
 
 
 class MessageRole(enum.StrEnum):

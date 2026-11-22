@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     agent_token_budget_ceiling: int = 500_000
     agent_cost_budget_ceiling_usd: float = 5.0
 
+    # How long a person has to approve or reject an action before it expires (Phase 4).
+    approval_expiry_hours: int = Field(default=24, ge=1, le=168)
+
     # Credential encryption (Phase 4)
     credential_encryption_key: SecretStr | None = None
 

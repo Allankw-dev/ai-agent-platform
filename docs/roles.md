@@ -15,6 +15,8 @@ grants nothing inside organizations today.
 | Create, edit, version, roll back, duplicate, enable/disable, delete agents | yes | yes | yes | no |
 | View runs and their steps | yes | yes | yes | yes |
 | Start and cancel runs | yes | yes | yes | no |
+| See approval requests and their exact arguments | yes | yes | yes | no |
+| Approve or reject an agent's action | yes | yes | no | no |
 | See which integrations exist (never their secrets) | yes | yes | yes | no |
 | Add, edit, disable and delete integrations; save, replace or remove a secret | yes | yes | no | no |
 | Leave the organization | yes* | yes | yes | yes |

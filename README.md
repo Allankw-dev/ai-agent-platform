@@ -41,8 +41,8 @@ docker compose up -d --force-recreate api worker
 ## Status
 
 Phases 1 (foundation), 2 (accounts, organizations, roles, invitations) and 3 (agents, engine, runs)
-are complete. Phase 4 (tools and approvals) is in progress: steps 4A (credential vault, Integrations tab) and
-4B (HTTP tools) are done, and 4C (Slack tool) is built. See `CLAUDE.md` for conventions and commands, and `docs/` for the
+are complete. Phase 4 (tools and approvals) is in progress: steps 4A (credential vault, Integrations tab),
+4B (HTTP tools) and 4C (Slack tool) are done, and 4D (approvals backend) is built. See `CLAUDE.md` for conventions and commands, and `docs/` for the
 architecture, ER diagram and the Phase 4 design.
 
 ## Structure

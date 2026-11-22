@@ -173,14 +173,16 @@ async def workspace(api: "Api") -> "Workspace":
 @pytest.fixture
 def queue(api: "Api") -> Iterator["Queue"]:
     """Replace Celery with a recorder for the duration of a test."""
-    from app.api.deps import get_run_dispatcher
+    from app.api.deps import get_resume_dispatcher, get_run_dispatcher
     from app.main import app
     from tests.integration.engine_helpers import Queue
 
     recorder = Queue()
     app.dependency_overrides[get_run_dispatcher] = lambda: recorder.dispatch
+    app.dependency_overrides[get_resume_dispatcher] = lambda: recorder.dispatch_resume
     yield recorder
     app.dependency_overrides.pop(get_run_dispatcher, None)
+    app.dependency_overrides.pop(get_resume_dispatcher, None)
 
 
 @pytest.fixture

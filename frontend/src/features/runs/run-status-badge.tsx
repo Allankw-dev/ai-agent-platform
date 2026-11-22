@@ -25,6 +25,7 @@ export function RunStatusBadge({ status }: { status: RunStatus }) {
 
 const STEP_LABELS: Record<StepStatus, string> = {
   running: "Running",
+  awaiting_approval: "Waiting for approval",
   succeeded: "Succeeded",
   failed: "Failed",
   skipped: "Skipped",
@@ -32,6 +33,7 @@ const STEP_LABELS: Record<StepStatus, string> = {
 
 const STEP_VARIANTS: Record<StepStatus, "muted" | "accent" | "success" | "danger"> = {
   running: "accent",
+  awaiting_approval: "accent",
   succeeded: "success",
   failed: "danger",
   skipped: "muted",
