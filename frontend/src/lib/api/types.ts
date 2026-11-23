@@ -214,3 +214,31 @@ export type Integration = {
   created_at: string;
   updated_at: string;
 };
+
+// ---------- approvals ----------
+
+export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired" | "cancelled";
+
+/** An agent's action waiting for (or already given) a person's decision. */
+export type Approval = {
+  id: string;
+  run_id: string;
+  run_step_id: string | null;
+  agent_id: string;
+  agent_name: string;
+  agent_version: number;
+  tool_key: string;
+  tool_name: string | null;
+  /** Exactly what will run if this is approved: the checked, final form of the arguments. */
+  proposed_input: Record<string, unknown>;
+  /** What the model said when it asked. It is the model's own claim, not a verified fact. */
+  reasoning_summary: string | null;
+  status: ApprovalStatus;
+  requested_at: string;
+  expires_at: string | null;
+  seconds_left: number | null;
+  decided_by_id: string | null;
+  decided_by_name: string | null;
+  decided_at: string | null;
+  decision_note: string | null;
+};

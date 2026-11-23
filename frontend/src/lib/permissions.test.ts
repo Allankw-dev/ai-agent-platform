@@ -4,11 +4,13 @@ import {
   canAssign,
   canDeleteOrganization,
   canManage,
+  canDecideApprovals,
   canManageAgents,
   canManageIntegrations,
   canRunAgents,
   canManageMembers,
   canUpdateOrganization,
+  canViewApprovals,
   canViewIntegrations,
   invitableRoles,
 } from "@/lib/permissions";
@@ -92,6 +94,24 @@ describe("integration permissions (mirror of the API)", () => {
     }
     for (const role of ["developer", "member"] as const) {
       expect(canManageIntegrations(role)).toBe(false);
+    }
+  });
+});
+
+describe("approval permissions (mirror of the API)", () => {
+  it("owners, admins and developers see approvals; members do not", () => {
+    for (const role of ["owner", "admin", "developer"] as const) {
+      expect(canViewApprovals(role)).toBe(true);
+    }
+    expect(canViewApprovals("member")).toBe(false);
+  });
+
+  it("only owners and admins decide", () => {
+    for (const role of ["owner", "admin"] as const) {
+      expect(canDecideApprovals(role)).toBe(true);
+    }
+    for (const role of ["developer", "member"] as const) {
+      expect(canDecideApprovals(role)).toBe(false);
     }
   });
 });

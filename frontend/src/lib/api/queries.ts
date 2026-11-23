@@ -9,6 +9,8 @@ import type {
   AgentListItem,
   AgentRead,
   AgentStatus,
+  Approval,
+  ApprovalStatus,
   Integration,
   IntegrationProvider,
   Invitation,
@@ -46,7 +48,14 @@ export const keys = {
   run: (orgId: string, runId: string) => ["run", orgId, runId] as const,
   integrations: (orgId: string) => ["integrations", orgId] as const,
   integrationList: (orgId: string, limit: number) => ["integrations", orgId, limit] as const,
+  approvals: (orgId: string) => ["approvals", orgId] as const,
+  approvalList: (orgId: string, filters: ApprovalFilters) =>
+    ["approvals", orgId, "list", filters] as const,
+  approval: (orgId: string, approvalId: string) => ["approvals", orgId, "one", approvalId] as const,
+  pendingApprovals: (orgId: string) => ["approvals", orgId, "pending-count"] as const,
 };
+
+export type ApprovalFilters = { status?: ApprovalStatus; limit: number };
 
 export type RunFilters = { agentId?: string; status?: RunStatus; limit: number };
 
@@ -491,5 +500,82 @@ export function useRemoveSecret(orgId: string, integrationId: string) {
         method: "DELETE",
       }),
     onSuccess: () => client.invalidateQueries({ queryKey: keys.integrations(orgId) }),
+  });
+}
+
+// ---------- approvals ----------
+
+/** How often a list of waiting approvals, a waiting approval and the tab count are re-checked. */
+export const APPROVAL_LIST_POLL_MS = 10_000;
+export const APPROVAL_POLL_MS = 5_000;
+export const APPROVAL_COUNT_POLL_MS = 30_000;
+
+/** Only call this for people who may view approvals (the API refuses members). */
+export function useApprovals(orgId: string, filters: ApprovalFilters) {
+  const enabled = useEnabled();
+  return useQuery({
+    queryKey: keys.approvalList(orgId, filters),
+    queryFn: () =>
+      apiFetch<Page<Approval>>(`/organizations/${orgId}/approvals`, {
+        query: { limit: filters.limit, status: filters.status },
+      }),
+    enabled,
+    // Someone else may decide a waiting request, or one may expire: keep the list honest.
+    refetchInterval: (query) =>
+      query.state.data?.items.some((item) => item.status === "pending")
+        ? APPROVAL_LIST_POLL_MS
+        : false,
+  });
+}
+
+export function useApproval(orgId: string, approvalId: string) {
+  const enabled = useEnabled();
+  return useQuery({
+    queryKey: keys.approval(orgId, approvalId),
+    queryFn: () => apiFetch<Approval>(`/organizations/${orgId}/approvals/${approvalId}`),
+    enabled,
+    refetchInterval: (query) => (query.state.data?.status === "pending" ? APPROVAL_POLL_MS : false),
+  });
+}
+
+/**
+ * How many approvals are waiting, for the tab. `active` is false for people who may not view
+ * approvals, so no request is made for them.
+ */
+export function usePendingApprovalCount(orgId: string, active: boolean) {
+  const enabled = useEnabled() && active;
+  return useQuery({
+    queryKey: keys.pendingApprovals(orgId),
+    queryFn: async () => {
+      const page = await apiFetch<Page<Approval>>(`/organizations/${orgId}/approvals`, {
+        query: { status: "pending", limit: 1 },
+      });
+      return page.total;
+    },
+    enabled,
+    refetchInterval: APPROVAL_COUNT_POLL_MS,
+  });
+}
+
+/**
+ * Approve or reject one approval. The server decides once: a second click, or a late one, comes
+ * back as an error with the reason, and the screen then refreshes to show what really happened.
+ */
+export function useDecideApproval(orgId: string, approvalId: string) {
+  const client = useQueryClient();
+  const refresh = () =>
+    Promise.all([
+      client.invalidateQueries({ queryKey: keys.approvals(orgId) }),
+      client.invalidateQueries({ queryKey: keys.runs(orgId) }),
+      client.invalidateQueries({ queryKey: ["run", orgId] }),
+    ]);
+  return useMutation({
+    mutationFn: (input: { decision: "approve" | "reject"; note?: string }) =>
+      apiFetch<Approval>(`/organizations/${orgId}/approvals/${approvalId}/${input.decision}`, {
+        method: "POST",
+        body: input.note ? { note: input.note } : undefined,
+      }),
+    onSuccess: refresh,
+    onError: refresh,
   });
 }

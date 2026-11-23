@@ -113,7 +113,7 @@ describe("RunDetailPage", () => {
     expect(
       await screen.findByText(/paused until an owner or admin approves or rejects the action/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/slack\.send_message/, { selector: "div" })).toBeInTheDocument();
+    expect(screen.getByText(/slack\.send_message/)).toBeInTheDocument();
     expect(screen.getByText(/The request expires/)).toBeInTheDocument();
     expect(
       screen.getByText(/Waiting for a person to approve or reject an action/),
@@ -122,6 +122,47 @@ describe("RunDetailPage", () => {
     // A waiting run is still in progress: it can be cancelled and the page keeps updating.
     expect(screen.getByRole("button", { name: "Cancel run" })).toBeInTheDocument();
     expect(screen.getByText("This page updates by itself.")).toBeInTheDocument();
+  });
+
+  describe("the link from a waiting run to its approval", () => {
+    const waiting = () =>
+      runDetail({
+        status: "awaiting_approval",
+        output: null,
+        finished_at: null,
+        pending_approval: {
+          id: "appr-1",
+          tool_key: "slack.send_message",
+          requested_at: "2026-11-20T09:00:00Z",
+          expires_at: "2026-11-21T09:00:00Z",
+          seconds_left: 80_000,
+        },
+      });
+
+    it.each([
+      ["owner", "Review and decide"],
+      ["admin", "Review and decide"],
+      ["developer", "View the request"],
+    ] as const)("sends a %s to the request", async (role, label) => {
+      routeApi({ [`GET ${RUN}`]: waiting() });
+      renderRun(role);
+      const link = await screen.findByRole("link", { name: label });
+      expect(link).toHaveAttribute("href", expect.stringMatching(/\/approvals\/appr-1$/));
+    });
+
+    it("offers a member no link, since members cannot see approvals", async () => {
+      routeApi({ [`GET ${RUN}`]: waiting() });
+      renderRun("member");
+      await screen.findByText(/paused until an owner or admin approves/);
+      expect(screen.queryByRole("link", { name: /Review and decide|View the request/ })).toBeNull();
+    });
+
+    it("has no link when the run is not waiting", async () => {
+      routeApi({ [`GET ${RUN}`]: runDetail({ status: "succeeded" }) });
+      renderRun("owner");
+      await screen.findByRole("button", { name: "Run again" });
+      expect(screen.queryByRole("link", { name: /Review and decide/ })).toBeNull();
+    });
   });
 
   it("warns when a queued run has been waiting a long time, and not before", async () => {

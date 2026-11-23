@@ -22,7 +22,7 @@ import {
   newIdempotencyKey,
   secondsSince,
 } from "@/lib/format";
-import { canRunAgents } from "@/lib/permissions";
+import { canDecideApprovals, canRunAgents, canViewApprovals } from "@/lib/permissions";
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -162,14 +162,24 @@ export function RunDetailPage() {
 
       {data.status === "awaiting_approval" && (
         <Alert variant="info">
-          This run is paused until an owner or admin approves or rejects the action
-          {data.pending_approval ? ` ${data.pending_approval.tool_key}` : ""}. Nothing runs until
-          then.
-          {data.pending_approval?.expires_at
-            ? ` The request expires ${formatDateTime(data.pending_approval.expires_at)}.`
-            : ""}{" "}
-          The approval screens arrive in the next update; until then an owner or admin decides
-          through the API.
+          <div className="space-y-2">
+            <p>
+              This run is paused until an owner or admin approves or rejects the action
+              {data.pending_approval ? ` ${data.pending_approval.tool_key}` : ""}. Nothing runs
+              until then.
+              {data.pending_approval?.expires_at
+                ? ` The request expires ${formatDateTime(data.pending_approval.expires_at)}.`
+                : ""}
+            </p>
+            {data.pending_approval && canViewApprovals(org.role) && (
+              <Link
+                href={`/orgs/${org.id}/approvals/${data.pending_approval.id}`}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                {canDecideApprovals(org.role) ? "Review and decide" : "View the request"}
+              </Link>
+            )}
+          </div>
         </Alert>
       )}
 

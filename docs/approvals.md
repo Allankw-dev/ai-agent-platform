@@ -15,7 +15,7 @@ a sensitive tool.
    arguments** (for Slack, the cleaned text), the model's stated reason, and an expiry.
 2. The loop's state is saved on the run (a *checkpoint*), the run becomes `awaiting_approval`, and
    the worker is released. Waiting holds nothing, so a decision can take hours.
-3. An owner or admin approves or rejects (API below; screens arrive in step 4E).
+3. An owner or admin approves or rejects, on the Approvals tab (or through the API below).
 4. A worker resumes the run from the checkpoint:
    - **approved:** the stored arguments run, nothing is asked of the model, and the result goes back
      to it. Calls that followed in the same reply then continue, and may pause again.
@@ -54,6 +54,24 @@ Errors: `404 approval_not_found`; `409 approval_already_decided`, `approval_expi
 `approval_cancelled`, `approval_not_ready` (the run is a moment away from waiting); `503
 queue_unavailable` (see "If something fails").
 
+## The screens
+
+- **Approvals tab** (owners, admins, developers): the inbox, opening on what is waiting, with a
+  count on the tab. Filter by status. Each card shows the tool, the agent and version, a one-line
+  summary of the action, and the time left. It refreshes by itself while something is waiting.
+- **An approval** shows exactly what will run: for Slack the channel and the final message text; for
+  an HTTP write the method, address, headers and body; for any tool the exact data. Everything the
+  agent wrote is shown as plain text (never as markup or a link). Below it: the agent's own
+  explanation, labelled as unchecked, and the decision box.
+- **Deciding** (owners and admins): an optional note, then **Reject** (one click) or **Approve**
+  (asks you to confirm first). The buttons lock while the request is in flight. If your click is
+  refused (someone else decided, or it expired), the reason stays on screen and the page shows
+  what really happened. If the decision was saved but the run could not be handed on, a **Try
+  again** button appears.
+- **A waiting run's page** says it is paused, shows when the request expires, and links to the
+  approval ("Review and decide", or "View the request" for developers).
+- Members see none of this. Developers see requests but get no decision buttons.
+
 ## Why it is safe
 
 | Risk | What prevents it |
@@ -89,7 +107,11 @@ queue_unavailable` (see "If something fails").
 - No notifications yet: someone has to look at the inbox.
 - One decision at a time per run; there is no bulk approve.
 
-## Try it without the screens
+## Try it from PowerShell
+
+The script creates an agent whose calculator needs approval and runs it. Answer `l` to leave the request
+waiting, then decide it on the Approvals tab. Or decide it from the script:
+
 
 ```powershell
 .\scripts\try-approval.ps1                 # asks you to approve or reject
@@ -102,5 +124,5 @@ queue_unavailable` (see "If something fails").
 `app/engine/graph.py` (pause and resume), `app/engine/executor.py` (`resume_run`, checkpoints),
 `app/engine/recorder.py` (`request_approval`), `app/repositories/approvals.py` and
 `app/repositories/runs.py` (the atomic claims), `app/services/approvals.py` (deciding and the
-clock), `app/api/v1/approvals.py`. Tests: `tests/integration/test_approvals.py`,
+clock), `app/api/v1/approvals.py`; screens in `frontend/src/features/approvals/`. Tests: `tests/integration/test_approvals.py`,
 `tests/integration/test_approvals_rules.py`, `tests/test_checkpoint.py`.

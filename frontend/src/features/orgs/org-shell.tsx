@@ -10,14 +10,16 @@ import { Spinner } from "@/components/ui/spinner";
 import { ErrorNotice } from "@/components/error-notice";
 import { OrgProvider } from "@/features/orgs/org-context";
 import { ApiError } from "@/lib/api-client";
-import { useOrganization } from "@/lib/api/queries";
-import { ROLE_LABELS, canViewIntegrations } from "@/lib/permissions";
+import { useOrganization, usePendingApprovalCount } from "@/lib/api/queries";
+import { ROLE_LABELS, canViewApprovals, canViewIntegrations } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 
 export function OrgShell({ children }: { children: React.ReactNode }) {
   const { orgId } = useParams<{ orgId: string }>();
   const pathname = usePathname();
   const { data: org, error, isPending } = useOrganization(orgId);
+  // Only people who may see approvals ask how many are waiting.
+  const pending = usePendingApprovalCount(orgId, org !== undefined && canViewApprovals(org.role));
 
   if (isPending && !error) return <Spinner label="Loading organization" />;
 
@@ -40,10 +42,20 @@ export function OrgShell({ children }: { children: React.ReactNode }) {
   }
   if (error || !org) return <ErrorNotice error={error} />;
 
-  const tabs = [
+  const tabs: { href: string; label: string; exact: boolean; count?: number }[] = [
     { href: `/orgs/${org.id}`, label: "Overview", exact: true },
     { href: `/orgs/${org.id}/agents`, label: "Agents", exact: false },
     { href: `/orgs/${org.id}/runs`, label: "Runs", exact: false },
+    ...(canViewApprovals(org.role)
+      ? [
+          {
+            href: `/orgs/${org.id}/approvals`,
+            label: "Approvals",
+            exact: false,
+            count: pending.data ?? 0,
+          },
+        ]
+      : []),
     ...(canViewIntegrations(org.role)
       ? [{ href: `/orgs/${org.id}/integrations`, label: "Integrations", exact: false }]
       : []),
@@ -79,6 +91,17 @@ export function OrgShell({ children }: { children: React.ReactNode }) {
                   )}
                 >
                   {tab.label}
+                  {tab.count ? (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className="ml-1.5 rounded-full bg-accent px-1.5 py-0.5 text-xs font-medium text-background"
+                      >
+                        {tab.count}
+                      </span>{" "}
+                      <span className="sr-only">({tab.count} waiting)</span>
+                    </>
+                  ) : null}
                 </Link>
               );
             })}

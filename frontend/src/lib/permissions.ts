@@ -45,3 +45,10 @@ export const canViewIntegrations = (role: OrgRole) =>
 
 /** Add, edit and delete integrations, and save or remove their secrets. */
 export const canManageIntegrations = (role: OrgRole) => role === "owner" || role === "admin";
+
+/** See approval requests and their exact arguments. Members cannot. */
+export const canViewApprovals = (role: OrgRole) =>
+  role === "owner" || role === "admin" || role === "developer";
+
+/** Approve or reject an agent's action. */
+export const canDecideApprovals = (role: OrgRole) => role === "owner" || role === "admin";

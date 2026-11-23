@@ -58,6 +58,5 @@ Frontend (in `frontend/`, Node 22, Next.js 16 with Cache Components enabled):
       [x] 3D frontend (agent screens, run screens)
 - [ ] Phase 4: Tools and approvals (MVP). Design in `docs/phase4-design.md`, approved (all seven
       decisions accepted as recommended). [x] 4A vault and Integrations tab (accepted), [x] 4B HTTP tools
-      (accepted), [x] 4C Slack (accepted), [x] 4D approvals backend (built, awaiting
-      acceptance), [ ] 4E approvals
-      screens, [ ] 4F acceptance
+      (accepted), [x] 4C Slack (accepted), [x] 4D approvals backend (accepted), [x] 4E
+      approval screens (built, awaiting acceptance), [ ] 4F acceptance

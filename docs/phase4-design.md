@@ -1,7 +1,8 @@
 # Phase 4 design: credentials, real tools and approvals
 
 **Status: approved ("accept all", 2026-11-16). Step 4A (credential vault) is accepted; 4B (HTTP
-tools) is accepted; 4C (Slack tool) is accepted; 4D (approvals backend) is built and awaiting acceptance; 4E onwards are not started.** Section 0 records the decisions; the recommendation in
+tools) is accepted; 4C (Slack tool) is accepted; 4D (approvals backend) is accepted; 4E (approval screens) is built and awaiting acceptance; 4F
+is not started.** Section 0 records the decisions; the recommendation in
 bold is what was accepted.
 
 ## 0. Decisions
@@ -215,7 +216,7 @@ check before the next.
 | 4B (built) | Address check, `http.get`, `http.request`, integration choice on the agent form | Every blocked address class, redirects, limits, allowlist |
 | 4C (built) | `slack.send_message` | Channel allowlist, mention neutralising, mocked Slack |
 | 4D (built) | Pause and resume, approvals API, expiry, migration 0010 | Double decide, expiry, cancel, at-most-once, resume races |
-| 4E | Approvals tab and run page states | Roles, decisions, empty and error states |
+| 4E (built) | Approvals tab and run page states | Roles, decisions, empty and error states |
 | 4F | End-to-end acceptance on your machine | Approve, reject and expire, with a real Slack message |
 
 ## 8. What I need from you

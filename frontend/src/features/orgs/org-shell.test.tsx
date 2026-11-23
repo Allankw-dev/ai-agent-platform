@@ -130,4 +130,59 @@ describe("OrgShell", () => {
     await screen.findByRole("link", { name: "Members" });
     expect(screen.queryByRole("link", { name: "Integrations" })).not.toBeInTheDocument();
   });
+
+  describe("the Approvals tab", () => {
+    const PENDING = "GET /organizations/org-1/approvals";
+    const waiting = (total: number) => ({ items: [], total, limit: 1, offset: 0 });
+
+    it.each(["owner", "admin", "developer"] as const)("is shown to a %s", async (role) => {
+      routeApi({ "GET /organizations/org-1": { ...ORG, role }, [PENDING]: waiting(0) });
+      renderWithQuery(<OrgShell>x</OrgShell>);
+      const tab = await screen.findByRole("link", { name: "Approvals" });
+      expect(tab).toHaveAttribute("href", "/orgs/org-1/approvals");
+    });
+
+    it("is hidden from members, who also never trigger the count request", async () => {
+      routeApi({ "GET /organizations/org-1": { ...ORG, role: "member" } });
+      renderWithQuery(<OrgShell>x</OrgShell>);
+      await screen.findByRole("link", { name: "Members" });
+      expect(screen.queryByRole("link", { name: /Approvals/ })).toBeNull();
+      expect(apiFetch.mock.calls.some(([path]) => String(path).includes("/approvals"))).toBe(false);
+    });
+
+    it("shows how many are waiting, and says so to screen readers", async () => {
+      routeApi({ "GET /organizations/org-1": ORG, [PENDING]: waiting(3) });
+      renderWithQuery(<OrgShell>x</OrgShell>);
+      const tab = await screen.findByRole("link", { name: "Approvals (3 waiting)" });
+      expect(tab).toHaveTextContent("3");
+      expect(apiFetch).toHaveBeenCalledWith(
+        "/organizations/org-1/approvals",
+        expect.objectContaining({ query: { status: "pending", limit: 1 } }),
+      );
+    });
+
+    it("shows no number when nothing is waiting", async () => {
+      routeApi({ "GET /organizations/org-1": ORG, [PENDING]: waiting(0) });
+      renderWithQuery(<OrgShell>x</OrgShell>);
+      const tab = await screen.findByRole("link", { name: "Approvals" });
+      expect(tab).not.toHaveTextContent(/\d/);
+    });
+
+    it("still shows the tab, without a number, if the count cannot be loaded", async () => {
+      routeApi({
+        "GET /organizations/org-1": ORG,
+        [PENDING]: apiError(500, "boom", "The server had a problem."),
+      });
+      renderWithQuery(<OrgShell>x</OrgShell>);
+      expect(await screen.findByRole("link", { name: "Approvals" })).toBeInTheDocument();
+    });
+
+    it("is the active tab on the inbox and on an approval", async () => {
+      routeApi({ "GET /organizations/org-1": ORG, [PENDING]: waiting(0) });
+      nav.pathname = "/orgs/org-1/approvals/appr-1";
+      renderWithQuery(<OrgShell>x</OrgShell>);
+      const tab = await screen.findByRole("link", { name: "Approvals" });
+      expect(tab).toHaveAttribute("aria-current", "page");
+    });
+  });
 });
