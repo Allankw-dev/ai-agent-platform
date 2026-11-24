@@ -7,7 +7,7 @@ Browser ──▶ Next.js (Vercel)            Supabase Auth (JWT issuer)
    │                                          │
    └──────────▶ FastAPI API (Render) ◀────────┘  verifies JWTs
                   │        │
-                  │        └──▶ Redis ◀──▶ Celery workers ──▶ Claude API, external tools
+                  │        └──▶ Redis ◀──▶ Celery workers ──▶ LLM provider (Gemini), external tools
                   ▼                              │
             PostgreSQL (Supabase, pgvector) ◀────┘
 ```
@@ -15,7 +15,7 @@ Browser ──▶ Next.js (Vercel)            Supabase Auth (JWT issuer)
 - **Web:** Next.js 16, React, Tailwind, shadcn/ui, TanStack Query.
 - **API:** FastAPI. Layers: routers, services, repositories. No logic in `main.py`.
 - **Workers:** Celery on Redis run agent executions, schedules and webhooks.
-- **Engine (Phase 3):** LangGraph loop: load agent, call Claude, validate tool call, check policy,
+- **Engine (Phase 3):** LangGraph loop: load agent, call the model, validate tool call, check policy,
   execute or pause for approval, repeat within iteration, time, token and cost limits.
 - **Database:** PostgreSQL. Alembic migrations. See `er-diagram.md`.
 

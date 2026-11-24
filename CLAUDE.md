@@ -5,6 +5,10 @@ Multi-tenant AI Agent Automation SaaS. Agents run on an LLM provider with tool u
 engine), orchestrated by LangGraph, executed by Celery workers, stored in Postgres (Supabase). See `docs/architecture.md`
 and `docs/er-diagram.md`.
 
+## Roadmap
+The plan for everything after Phase 4 is in `docs/MASTER_BUILD_INSTRUCTION.md` (revised). Follow its
+phase order and engineering rules. Where it and this file disagree, ask.
+
 ## Key decisions
 - Auth: Supabase Auth. FastAPI only verifies JWTs and maps them to local users.
 - Isolation, two layers: every query is scoped by `org_id` in the app, and Postgres Row Level

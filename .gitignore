@@ -25,3 +25,6 @@ Thumbs.db
 
 # Docker
 *.log
+
+# Machine reports that do not belong in the repo
+battery-report.html
