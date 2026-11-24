@@ -57,8 +57,8 @@ Celery on Redis, modular monolith, routers -> services -> repositories, no logic
    (never in-memory counters): organization, agent and provider concurrency, plus daily token and
    cost quotas. Provider limits must respect Gemini free-tier 429s. Reserve before a run, settle
    after it. Simultaneous launches must not exceed a limit.
-3. **More run limits.** Add `max_tool_calls` and delegation depth to the existing iterations,
-   time, tokens and cost.
+3. **More run limits.** Add `max_tool_calls` now and delegation depth in Phase 8, to the existing
+   iterations, time, tokens and cost.
 4. **Checkpoint recovery.** Checkpoint at each iteration boundary. A crashed run may resume and
    retry only steps with no side effects. A side-effect step that has started is never retried; the
    run reports plainly that it is unknown whether the action happened (existing behaviour).
@@ -91,9 +91,10 @@ before the current one is tested and accepted by me. The application must run af
 ### Phase 5: run reliability and quotas
 - 5A Run event log, SSE endpoint with sequence ids and reconnect, frontend run page switched from
   polling to the stream (keep polling as a fallback).
-- 5B Quotas and concurrency (section 3.2), `max_tool_calls`, delegation-depth field (unused until
-  Phase 8), usage page backed by real data.
-- 5C Checkpoint recovery (3.4), retry policy per tool with idempotency for retried side effects.
+- 5B Quotas and concurrency (section 3.2), `max_tool_calls`, provider limiter, usage page backed by
+  real data. Delegation depth is added in Phase 8 with the multi-agent migration, not before.
+- 5C Checkpoint recovery (3.4): heartbeats, fencing, safe resume. Per-tool retry policies wait for
+  Phase 6, when triggers call external APIs.
 - 5D Sentry and OpenTelemetry (3.10); audit coverage review of every sensitive operation.
 - 5E Organization kill switch (3.7).
 - Tests: simultaneous run creation against a quota, duplicate queue delivery, two workers
