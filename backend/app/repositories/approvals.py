@@ -7,11 +7,24 @@ from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agents import Agent, AgentVersion, Tool
-from app.models.enums import ApprovalStatus, RunStatus
+from app.models.enums import ApprovalStatus, RunEventType, RunStatus
 from app.models.identity import User
 from app.models.runs import AgentRun, Approval
+from app.repositories import run_events
 
 TERMINAL_RUN_STATUSES = (RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED)
+
+
+async def _emit_decided(
+    session: AsyncSession, run_id: uuid.UUID, approval_id: uuid.UUID, status: ApprovalStatus
+) -> None:
+    """Tell the run's watchers an approval was settled (by a person, or by expiry or cancel)."""
+    await run_events.emit(
+        session,
+        run_id,
+        RunEventType.APPROVAL_DECIDED,
+        {"approval_id": str(approval_id), "decision": status.value},
+    )
 
 
 @dataclass(frozen=True)
@@ -156,9 +169,13 @@ async def decide(
             ),
         )
         .values(status=status, decided_by_id=user_id, decided_at=func.now(), decision_note=note)
-        .returning(Approval.id)
+        .returning(Approval.id, Approval.run_id)
     )
-    return result.first() is not None
+    decided = result.first()
+    if decided is None:
+        return False
+    await _emit_decided(session, decided[1], decided[0], status)
+    return True
 
 
 async def expire_due(session: AsyncSession, org_id: uuid.UUID) -> list[tuple[uuid.UUID, uuid.UUID]]:
@@ -174,7 +191,10 @@ async def expire_due(session: AsyncSession, org_id: uuid.UUID) -> list[tuple[uui
         .values(status=ApprovalStatus.EXPIRED, decided_at=func.now())
         .returning(Approval.id, Approval.run_id)
     )
-    return [(row[0], row[1]) for row in result]
+    expired = [(row[0], row[1]) for row in result]
+    for approval_id, run_id in expired:
+        await _emit_decided(session, run_id, approval_id, ApprovalStatus.EXPIRED)
+    return expired
 
 
 async def cancel_orphaned(
@@ -196,7 +216,10 @@ async def cancel_orphaned(
         .values(status=ApprovalStatus.CANCELLED, decided_at=func.now())
         .returning(Approval.id, Approval.run_id)
     )
-    return [(row[0], row[1]) for row in result]
+    cancelled = [(row[0], row[1]) for row in result]
+    for approval_id, run_id in cancelled:
+        await _emit_decided(session, run_id, approval_id, ApprovalStatus.CANCELLED)
+    return cancelled
 
 
 async def cancel_for_run(
@@ -212,4 +235,7 @@ async def cancel_for_run(
         .values(status=ApprovalStatus.CANCELLED, decided_at=func.now())
         .returning(Approval.id)
     )
-    return [row[0] for row in result]
+    approval_ids = [row[0] for row in result]
+    for approval_id in approval_ids:
+        await _emit_decided(session, run_id, approval_id, ApprovalStatus.CANCELLED)
+    return approval_ids

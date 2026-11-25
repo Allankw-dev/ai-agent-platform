@@ -16,10 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db.tenancy import use_tenant
 from app.engine.pricing import micro_to_usd
-from app.models.enums import RunStatus, StepStatus, StepType
+from app.models.enums import RunEventType, RunStatus, StepStatus, StepType
 from app.models.runs import AgentRun, RunStep
 from app.models.usage import UsageRecord
 from app.repositories import approvals as approval_repo
+from app.repositories import run_events
 from app.services import audit
 
 MAX_TEXT_CHARS = 20_000
@@ -100,6 +101,18 @@ class RunRecorder:
                 input=scrub(input) if input is not None else None,
             )
             session.add(step)
+            await session.flush()
+            await run_events.emit(
+                session,
+                self._run_id,
+                RunEventType.STEP_STARTED,
+                {
+                    "step_id": str(step.id),
+                    "sequence": step.sequence,
+                    "step_type": step_type.value,
+                    "tool_key": tool_key,
+                },
+            )
             await session.commit()
             return step.id
 
@@ -125,6 +138,12 @@ class RunRecorder:
                     output_tokens=output_tokens,
                     finished_at=func.now(),
                 )
+            )
+            await run_events.emit(
+                session,
+                self._run_id,
+                RunEventType.STEP_FINISHED,
+                {"step_id": str(step_id), "status": status.value},
             )
             await session.commit()
 
@@ -167,6 +186,12 @@ class RunRecorder:
                 resource_type="approval",
                 resource_id=approval.id,
                 details={"run_id": str(self._run_id), "tool_key": tool_key},
+            )
+            await run_events.emit(
+                session,
+                self._run_id,
+                RunEventType.APPROVAL_REQUESTED,
+                {"approval_id": str(approval.id), "step_id": str(step_id), "tool_key": tool_key},
             )
             await session.commit()
             return approval.id

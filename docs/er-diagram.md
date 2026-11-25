@@ -20,6 +20,7 @@ erDiagram
     agents ||--o{ agent_runs : "executes"
     agent_versions ||--o{ agent_runs : "run with"
     agent_runs ||--o{ run_steps : "logs"
+    agent_runs ||--o{ run_events : "announces"
     agent_runs ||--o{ approvals : "pauses for"
     run_steps ||--o{ approvals : "raised by"
     agents ||--o{ conversations : "chats"
@@ -39,6 +40,7 @@ erDiagram
     integrations { uuid id PK; uuid org_id FK; string provider; string name }
     credentials { uuid id PK; uuid integration_id FK "UK"; bytes encrypted_payload; int key_version; uuid set_by_id FK }
     agent_runs { uuid id PK; uuid agent_id FK; uuid agent_version_id FK; string status; string idempotency_key; numeric cost_usd; jsonb checkpoint; timestamptz last_resumed_at }
+    run_events { uuid id PK; uuid run_id FK; int seq; string type; json data }
     run_steps { uuid id PK; uuid run_id FK; int sequence; string step_type; string status }
     approvals { uuid id PK; uuid run_id FK; uuid run_step_id FK; string tool_key; jsonb proposed_input; string status; timestamptz expires_at; uuid decided_by_id FK }
     conversations { uuid id PK; uuid agent_id FK; uuid user_id FK }

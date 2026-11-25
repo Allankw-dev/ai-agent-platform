@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     # How long a person has to approve or reject an action before it expires (Phase 4).
     approval_expiry_hours: int = Field(default=24, ge=1, le=168)
 
+    # Live run streaming (Phase 5A): how often the stream looks for new events, how often it
+    # sends a keep-alive when nothing happened, and how long one connection lives before the
+    # client reconnects from the last sequence number it saw.
+    run_stream_poll_seconds: float = Field(default=1.0, gt=0, le=10)
+    run_stream_heartbeat_seconds: float = Field(default=15.0, gt=0)
+    run_stream_max_seconds: float = Field(default=300.0, gt=0)
+
     # Credential encryption (Phase 4)
     credential_encryption_key: SecretStr | None = None
 

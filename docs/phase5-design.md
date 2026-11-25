@@ -1,7 +1,7 @@
 # Phase 5 design: run reliability and quotas
 
-Status: **proposed, awaiting review.** Nothing is built yet. Each decision below has a
-recommended default; reply "accept all" or name the ones to change.
+Status: **approved** (all eight decisions accepted as recommended). 5A is built and tested;
+5B to 5E are not started.
 
 Goal: before schedules, webhooks and API keys can start runs with nobody watching (Phase 6), runs
 must be observable live, bounded by quotas, and recoverable after a worker dies.

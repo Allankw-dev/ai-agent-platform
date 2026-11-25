@@ -5,7 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RunDetailPage } from "@/features/runs/run-detail-page";
 import type { OrgRole } from "@/lib/api/types";
 import { inOrg } from "@/test/agents";
-import { apiError, apiFetch, callsTo, routeApi } from "@/test/api-mock";
+import {
+  apiError,
+  apiFetch,
+  apiStream,
+  callsTo,
+  liveStream,
+  routeApi,
+  sseFrame,
+  unavailableStream,
+} from "@/test/api-mock";
 import { resetAuth } from "@/test/auth-mock";
 import { nav, resetNavigation, router } from "@/test/next-navigation";
 import { renderWithQuery } from "@/test/render";
@@ -27,6 +36,8 @@ beforeEach(() => {
   resetNavigation();
   resetAuth();
   apiFetch.mockReset();
+  apiStream.mockReset();
+  apiStream.mockImplementation(unavailableStream); // no live stream unless a test opens one
   nav.params = { orgId: "org-1", runId: "run-1" };
 });
 afterEach(() => vi.useRealTimers());
@@ -213,6 +224,105 @@ describe("RunDetailPage", () => {
     expect(calls).toBe(3);
     await vi.advanceTimersByTimeAsync(20_000);
     expect(calls).toBe(3);
+  });
+
+  describe("live updates", () => {
+    const working = () =>
+      runDetail({ status: "running", output: null, steps: [], finished_at: null });
+    const STREAM = "/organizations/org-1/runs/run-1/events/stream";
+
+    it("follows a run that is still going, and only that", async () => {
+      routeApi({ [`GET ${RUN}`]: runDetail() });
+      renderRun();
+      await screen.findByRole("button", { name: "Run again" });
+      expect(apiStream).not.toHaveBeenCalled();
+
+      apiFetch.mockReset();
+      routeApi({ [`GET ${RUN}`]: working() });
+      renderRun();
+      await waitFor(() => expect(apiStream).toHaveBeenCalledTimes(1));
+      expect(apiStream).toHaveBeenCalledWith(
+        STREAM,
+        expect.objectContaining({ query: { after: 0 } }),
+      );
+    });
+
+    it("updates the moment the stream reports a change, without waiting for the next check", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const stream = { current: liveStream() };
+      apiStream.mockImplementation(async (_path, options) => {
+        stream.current = liveStream(options.signal);
+        return stream.current.response;
+      });
+      let calls = 0;
+      routeApi({ [`GET ${RUN}`]: () => (++calls === 1 ? working() : runDetail()) });
+      renderRun();
+      expect(await screen.findByText(/The agent is working/)).toBeInTheDocument();
+      await waitFor(() => expect(apiStream).toHaveBeenCalled());
+
+      stream.current.send(sseFrame(5, "run.finished", { status: "succeeded" }));
+      expect(
+        await screen.findByText("VAT is KES 2,000, so the total is KES 14,500."),
+      ).toBeInTheDocument();
+      expect(calls).toBe(2); // one refresh for the event, well before the 2-second check
+    });
+
+    it("refreshes once for a burst of events", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const stream = { current: liveStream() };
+      apiStream.mockImplementation(async (_path, options) => {
+        stream.current = liveStream(options.signal);
+        return stream.current.response;
+      });
+      routeApi({ [`GET ${RUN}`]: working() });
+      renderRun();
+      await screen.findByText(/The agent is working/);
+      await waitFor(() => expect(apiStream).toHaveBeenCalled());
+
+      stream.current.send(
+        sseFrame(2, "step.started") + sseFrame(3, "step.finished") + sseFrame(4, "step.started"),
+      );
+      await vi.advanceTimersByTimeAsync(500);
+      expect(callsTo("GET", RUN)).toHaveLength(2);
+    });
+
+    it("checks only occasionally while the stream is connected", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      apiStream.mockImplementation(async (_path, options) => liveStream(options.signal).response);
+      routeApi({ [`GET ${RUN}`]: working() });
+      renderRun();
+      await screen.findByText(/The agent is working/);
+      await waitFor(() => expect(apiStream).toHaveBeenCalled());
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(callsTo("GET", RUN)).toHaveLength(1); // not every 2 seconds
+      await vi.advanceTimersByTimeAsync(25_000);
+      expect(callsTo("GET", RUN)).toHaveLength(2); // a slow safety check
+    });
+
+    it("keeps checking every couple of seconds when no stream can be opened", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      apiStream.mockRejectedValue(apiError(404, "run_not_found", "Run not found."));
+      routeApi({ [`GET ${RUN}`]: working() });
+      renderRun();
+      await screen.findByText(/The agent is working/);
+      await vi.advanceTimersByTimeAsync(4_300);
+      expect(callsTo("GET", RUN).length).toBeGreaterThanOrEqual(3);
+    });
+
+    it("stops following when the page is left", async () => {
+      let signal: AbortSignal | undefined;
+      apiStream.mockImplementation(async (_path, options) => {
+        signal = options.signal;
+        return liveStream(options.signal).response;
+      });
+      routeApi({ [`GET ${RUN}`]: working() });
+      const view = renderRun();
+      await waitFor(() => expect(signal).toBeDefined());
+      expect(signal?.aborted).toBe(false);
+      view.unmount();
+      expect(signal?.aborted).toBe(true);
+    });
   });
 
   it("lets a manager cancel a run that is still going", async () => {

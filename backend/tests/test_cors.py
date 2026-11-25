@@ -52,6 +52,16 @@ async def test_starting_a_run_passes_the_preflight(client: AsyncClient) -> None:
     assert response.status_code == 200
 
 
+async def test_resuming_an_event_stream_passes_the_preflight(client: AsyncClient) -> None:
+    zero = "00000000-0000-0000-0000-000000000000"
+    response = await client.options(
+        f"/api/v1/organizations/{zero}/runs/{zero}/events/stream",
+        headers=preflight("GET", "authorization,last-event-id"),
+    )
+    assert response.status_code == 200
+    assert "last-event-id" in response.headers["access-control-allow-headers"].lower()
+
+
 async def test_unexpected_headers_are_still_refused(client: AsyncClient) -> None:
     response = await client.options(
         "/api/v1/organizations", headers=preflight("POST", "authorization,x-something-else")

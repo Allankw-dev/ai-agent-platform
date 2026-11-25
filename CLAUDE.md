@@ -50,6 +50,9 @@ Frontend (in `frontend/`, Node 22, Next.js 16 with Cache Components enabled):
 - Every tenant table has `org_id`. Every change to a model needs a migration (CI enforces it).
 - Anything that grants access because of someone's email address must use `ConfirmedUser`, not
   `CurrentUser` (the token's email claim does not prove the address was confirmed).
+- Every change to a run's state (started, finished, cancelled, paused, resumed, a step, an approval)
+  writes a run event in the same transaction through `run_events.emit`. Event `data` holds ids and
+  statuses only, never tool arguments, tool output or message text (see `docs/engine.md`).
 - Delivering changes as zips: a zip cannot delete files, so list deleted or moved files explicitly.
 - No decorative UI: every control must work.
 - Commit at logical milestones with clear messages.
@@ -60,7 +63,10 @@ Frontend (in `frontend/`, Node 22, Next.js 16 with Cache Components enabled):
       [x] 2C organizations/roles/invitations, [x] 2D login/register pages and app shell
 - [x] Phase 3: Agents and engine: [x] 3A agents and versions, [x] 3B engine (Gemini), [x] 3C runs API,
       [x] 3D frontend (agent screens, run screens)
-- [ ] Phase 4: Tools and approvals (MVP). Design in `docs/phase4-design.md`, approved (all seven
-      decisions accepted as recommended). [x] 4A vault and Integrations tab (accepted), [x] 4B HTTP tools
-      (accepted), [x] 4C Slack (accepted), [x] 4D approvals backend (accepted), [x] 4E
-      approval screens (built, awaiting acceptance), [ ] 4F acceptance
+- [x] Phase 4: Tools and approvals (MVP). Design in `docs/phase4-design.md`, approved (all seven
+      decisions accepted as recommended). [x] 4A vault and Integrations tab, [x] 4B HTTP tools,
+      [x] 4C Slack, [x] 4D approvals backend, [x] 4E approval screens, [x] 4F acceptance and cleanup
+- [ ] Phase 5: Run reliability and quotas. Design in `docs/phase5-design.md`, approved (all eight
+      decisions accepted as recommended). [x] 5A run events and streaming (built, awaiting
+      acceptance), [ ] 5B limits and quotas, [ ] 5C crash recovery, [ ] 5D observability and audit,
+      [ ] 5E emergency stop

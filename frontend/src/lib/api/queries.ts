@@ -1,9 +1,11 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/features/auth/auth-provider";
 import { apiFetch } from "@/lib/api-client";
+import { followRunEvents } from "@/lib/run-events";
 import type {
   AgentConfigInput,
   AgentListItem,
@@ -378,15 +380,66 @@ export function useRuns(orgId: string, filters: RunFilters) {
   });
 }
 
-/** One run with its steps. Re-checks every couple of seconds until the run has finished. */
+/** While the live stream is connected the page is told what changes, so it only double-checks. */
+export const RUN_SAFETY_POLL_MS = 30_000;
+/** Events that arrive together (a step starting, finishing) cause one refresh, not several. */
+const REFRESH_AFTER_EVENT_MS = 150;
+
+/**
+ * Follows a run live while it is still going: each event it receives refreshes the run, and
+ * `onConnection` says whether the connection is open. It never throws and needs nothing else from
+ * the caller; if live updates are not possible, regular polling (see useRun) keeps the page right.
+ */
+function useFollowRun(
+  orgId: string,
+  runId: string,
+  following: boolean,
+  onConnection: (connected: boolean) => void,
+) {
+  const client = useQueryClient();
+  const refresh = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!following) return;
+    const controller = new AbortController();
+    void followRunEvents({
+      orgId,
+      runId,
+      signal: controller.signal,
+      onConnection,
+      onEvent: () => {
+        if (refresh.current) return; // a refresh is already on its way
+        refresh.current = setTimeout(() => {
+          refresh.current = null;
+          void client.invalidateQueries({ queryKey: keys.run(orgId, runId) });
+        }, REFRESH_AFTER_EVENT_MS);
+      },
+    });
+    return () => {
+      controller.abort();
+      if (refresh.current) clearTimeout(refresh.current);
+      refresh.current = null;
+      onConnection(false);
+    };
+  }, [client, orgId, runId, following, onConnection]);
+}
+
+/**
+ * One run with its steps. It updates the moment something happens (live stream), and checks every
+ * couple of seconds as a fallback while the stream is not connected, until the run has finished.
+ */
 export function useRun(orgId: string, runId: string) {
   const enabled = useEnabled();
-  return useQuery({
+  const [live, setLive] = useState(false);
+  const query = useQuery({
     queryKey: keys.run(orgId, runId),
     queryFn: () => apiFetch<RunDetail>(`/organizations/${orgId}/runs/${runId}`),
     enabled,
-    refetchInterval: (query) => (isActiveRun(query.state.data?.status) ? RUN_POLL_MS : false),
+    refetchInterval: (q) =>
+      isActiveRun(q.state.data?.status) ? (live ? RUN_SAFETY_POLL_MS : RUN_POLL_MS) : false,
   });
+  useFollowRun(orgId, runId, enabled && isActiveRun(query.data?.status), setLive);
+  return query;
 }
 
 /** `idempotencyKey` makes a double click return the same run instead of starting two. */

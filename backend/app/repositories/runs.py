@@ -7,8 +7,9 @@ from sqlalchemy import exists, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agents import Agent, AgentVersion
-from app.models.enums import ApprovalStatus, RunStatus, StepStatus
+from app.models.enums import ApprovalStatus, RunEventType, RunStatus, StepStatus
 from app.models.runs import AgentRun, Approval, RunStep
+from app.repositories import run_events
 
 OPEN_STATUSES = (RunStatus.QUEUED, RunStatus.RUNNING, RunStatus.AWAITING_APPROVAL)
 
@@ -80,7 +81,10 @@ async def claim(session: AsyncSession, run_id: uuid.UUID) -> bool:
         .values(status=RunStatus.RUNNING, started_at=datetime.now(UTC))
         .returning(AgentRun.id)
     )
-    return result.first() is not None
+    if result.first() is None:
+        return False
+    await run_events.emit(session, run_id, RunEventType.STARTED)
+    return True
 
 
 @dataclass(frozen=True)
@@ -125,6 +129,9 @@ async def claim_for_resume(
         .where(AgentRun.id == run_id)
         .values(status=RunStatus.RUNNING, checkpoint=None, last_resumed_at=datetime.now(UTC))
     )
+    await run_events.emit(
+        session, run_id, RunEventType.RESUMED, {"decision": approval.status.value}
+    )
     return ResumeClaim(checkpoint=checkpoint, approval=approval)
 
 
@@ -136,7 +143,16 @@ async def pause(session: AsyncSession, run_id: uuid.UUID, checkpoint: dict[str, 
         .values(status=RunStatus.AWAITING_APPROVAL, checkpoint=checkpoint)
         .returning(AgentRun.id)
     )
-    return result.first() is not None
+    if result.first() is None:
+        return False
+    awaiting = checkpoint.get("awaiting") or {}
+    await run_events.emit(
+        session,
+        run_id,
+        RunEventType.AWAITING_APPROVAL,
+        {"approval_id": str(awaiting["approval_id"])} if awaiting.get("approval_id") else {},
+    )
+    return True
 
 
 async def fail_awaiting(session: AsyncSession, run_id: uuid.UUID, error: str) -> bool:
@@ -149,7 +165,12 @@ async def fail_awaiting(session: AsyncSession, run_id: uuid.UUID, error: str) ->
         )
         .returning(AgentRun.id)
     )
-    return result.first() is not None
+    if result.first() is None:
+        return False
+    await run_events.emit(
+        session, run_id, RunEventType.FINISHED, {"status": RunStatus.FAILED.value}
+    )
+    return True
 
 
 async def finish(
@@ -167,10 +188,15 @@ async def finish(
         .values(status=status, output=output, error=error, finished_at=datetime.now(UTC))
         .returning(AgentRun.id)
     )
-    return result.first() is not None
+    if result.first() is None:
+        return False
+    await run_events.emit(session, run_id, RunEventType.FINISHED, {"status": status.value})
+    return True
 
 
 async def cancel(session: AsyncSession, org_id: uuid.UUID, run_id: uuid.UUID) -> bool:
+    """Cancel an open run. The caller records `run.cancelled` once it has settled the run's
+    approvals, so that it is the last event of the run (see services/runs.cancel_run)."""
     result = await session.execute(
         update(AgentRun)
         .where(
@@ -292,6 +318,8 @@ async def fail_orphaned(
         .returning(AgentRun.id)
     )
     run_ids = [row[0] for row in result]
+    for run_id in run_ids:
+        await run_events.emit(session, run_id, RunEventType.FINISHED, {"status": "failed"})
     if unknown:
         await session.execute(
             update(AgentRun).where(AgentRun.id.in_(unknown)).values(error=UNKNOWN_ACTION_RUN)

@@ -26,7 +26,14 @@ from app.models.base import (
     nullable_timestamp,
     tenant_fk,
 )
-from app.models.enums import ApprovalStatus, RunStatus, RunTrigger, StepStatus, StepType
+from app.models.enums import (
+    ApprovalStatus,
+    RunEventType,
+    RunStatus,
+    RunTrigger,
+    StepStatus,
+    StepType,
+)
 
 
 class AgentRun(UUIDPrimaryKeyMixin, TenantMixin, Base):
@@ -56,6 +63,9 @@ class AgentRun(UUIDPrimaryKeyMixin, TenantMixin, Base):
     # When the current stretch of work began after a pause. Waiting time is not work time, so the
     # orphan check and the time limit count from here, not from `started_at`.
     last_resumed_at: Mapped[datetime | None] = nullable_timestamp()
+    # Counter behind run_events.seq: each event takes the next number with one atomic UPDATE, so
+    # numbers are gap-free per run even with two writers (see repositories/run_events.py).
+    event_seq: Mapped[int] = mapped_column(Integer, server_default=text("0"))
 
     __table_args__ = (
         tenant_fk("agent_id", "agents"),
@@ -127,4 +137,26 @@ class Approval(UUIDPrimaryKeyMixin, TenantMixin, Base):
             unique=True,
             postgresql_where=text("status = 'pending'"),
         ),
+    )
+
+
+class RunEvent(UUIDPrimaryKeyMixin, TenantMixin, Base):
+    """Append-only log of what happened to a run, in order. Powers live streaming and replay.
+
+    `data` holds ids, statuses and counts only: never tool arguments, tool output or message
+    text, so an event can never leak what a step handled. Clients fetch the details separately.
+    """
+
+    __tablename__ = "run_events"
+
+    run_id: Mapped[uuid.UUID]
+    seq: Mapped[int] = mapped_column(Integer)
+    type: Mapped[RunEventType] = mapped_column(enum_column(RunEventType, "type"))
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    created_at: Mapped[datetime] = now_column()
+
+    __table_args__ = (
+        tenant_fk("run_id", "agent_runs", ondelete="CASCADE"),
+        UniqueConstraint("run_id", "seq", name="uq_run_events_run_id_seq"),
+        CheckConstraint("seq >= 1", name="seq_positive"),
     )

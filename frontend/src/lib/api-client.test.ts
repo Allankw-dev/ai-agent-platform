@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, apiFetch } from "@/lib/api-client";
+import { ApiError, apiFetch, apiStream } from "@/lib/api-client";
 import * as supabase from "@/lib/supabase";
 
 vi.mock("@/lib/supabase", async (importOriginal) =>
@@ -88,6 +88,48 @@ describe("apiFetch", () => {
   it("does not call the server without a signed-in user", async () => {
     vi.mocked(supabase.getAccessToken).mockResolvedValue(null);
     await expect(apiFetch("/x")).rejects.toMatchObject({ status: 401, code: "not_authenticated" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("apiStream", () => {
+  it("returns the response unread, sent as the signed-in user", async () => {
+    const body = new Response("id: 1\n\n", { headers: { "Content-Type": "text/event-stream" } });
+    fetchMock.mockResolvedValue(body);
+    const controller = new AbortController();
+    const response = await apiStream("/organizations/o/runs/r/events/stream", {
+      query: { after: 7 },
+      signal: controller.signal,
+    });
+    expect(response).toBe(body);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://localhost:8000/api/v1/organizations/o/runs/r/events/stream?after=7");
+    expect(init.headers.Authorization).toBe("Bearer test-token");
+    expect(init.signal).toBe(controller.signal);
+  });
+
+  it("turns an error answer into an ApiError, like apiFetch", async () => {
+    fetchMock.mockResolvedValue(
+      json({ error: { code: "run_not_found", message: "Run not found." } }, 404),
+    );
+    await expect(apiStream("/x")).rejects.toMatchObject({ status: 404, code: "run_not_found" });
+  });
+
+  it("reports an unreachable server as a network_error", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    await expect(apiStream("/x")).rejects.toMatchObject({ status: 0, code: "network_error" });
+  });
+
+  it("lets a deliberate cancellation through instead of calling it a network problem", async () => {
+    fetchMock.mockRejectedValue(new DOMException("Aborted", "AbortError"));
+    const error = await apiStream("/x").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DOMException);
+    expect(error).not.toBeInstanceOf(ApiError);
+  });
+
+  it("does not call the server without a signed-in user", async () => {
+    vi.mocked(supabase.getAccessToken).mockResolvedValue(null);
+    await expect(apiStream("/x")).rejects.toMatchObject({ status: 401 });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

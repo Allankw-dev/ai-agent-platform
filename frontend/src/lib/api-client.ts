@@ -35,14 +35,12 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
   return `${apiBaseUrl}/api/v1${path}${suffix}`;
 }
 
-/** Calls the backend as the signed-in user. Resolves to the parsed JSON (undefined for 204). */
-export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function send(path: string, options: RequestOptions): Promise<Response> {
   const token = await getAccessToken();
   if (!token) throw new ApiError(401, "not_authenticated", "Please sign in to continue.");
 
-  let response: Response;
   try {
-    response = await fetch(buildUrl(path, options.query), {
+    return await fetch(buildUrl(path, options.query), {
       method: options.method ?? "GET",
       signal: options.signal,
       cache: "no-store",
@@ -53,20 +51,38 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
       },
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     });
-  } catch {
+  } catch (error) {
+    // A request cancelled on purpose (the page was left) is not a network problem.
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw new ApiError(0, "network_error", "Could not reach the server. Check your connection.");
   }
+}
 
-  if (response.status === 204) return undefined as T;
-
+async function failure(response: Response): Promise<ApiError> {
   const payload: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    const error = (payload as { error?: { code?: string; message?: string } } | null)?.error;
-    throw new ApiError(
-      response.status,
-      error?.code ?? "unknown_error",
-      error?.message ?? "Something went wrong. Please try again.",
-    );
-  }
-  return payload as T;
+  const error = (payload as { error?: { code?: string; message?: string } } | null)?.error;
+  return new ApiError(
+    response.status,
+    error?.code ?? "unknown_error",
+    error?.message ?? "Something went wrong. Please try again.",
+  );
+}
+
+/** Calls the backend as the signed-in user. Resolves to the parsed JSON (undefined for 204). */
+export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await send(path, options);
+  if (response.status === 204) return undefined as T;
+  if (!response.ok) throw await failure(response);
+  return (await response.json().catch(() => null)) as T;
+}
+
+/**
+ * Opens a long-lived response (server-sent events) as the signed-in user and returns it unread.
+ * `EventSource` cannot send an Authorization header, and a token in the URL would end up in logs,
+ * so streams are read from a normal `fetch` body instead. A non-2xx answer throws like apiFetch.
+ */
+export async function apiStream(path: string, options: RequestOptions = {}): Promise<Response> {
+  const response = await send(path, options);
+  if (!response.ok) throw await failure(response);
+  return response;
 }

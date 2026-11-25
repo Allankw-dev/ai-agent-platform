@@ -19,6 +19,7 @@ EXPECTED_TABLES = {
     "credentials",
     "agent_runs",
     "run_steps",
+    "run_events",
     "approvals",
     "conversations",
     "messages",

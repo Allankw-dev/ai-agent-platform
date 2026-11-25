@@ -137,6 +137,24 @@ export type AgentConfigInput = {
 
 export type RunStatus =
   "queued" | "running" | "awaiting_approval" | "succeeded" | "failed" | "cancelled";
+export type RunEventType =
+  | "run.queued"
+  | "run.started"
+  | "step.started"
+  | "step.finished"
+  | "approval.requested"
+  | "approval.decided"
+  | "run.awaiting_approval"
+  | "run.resumed"
+  | "run.finished"
+  | "run.cancelled";
+/** One thing that happened to a run. `data` holds ids and statuses only, never step content. */
+export type RunEvent = {
+  seq: number;
+  type: RunEventType;
+  data: Record<string, unknown>;
+  created_at: string;
+};
 export type StepType = "llm_call" | "tool_call" | "approval" | "error";
 export type StepStatus = "running" | "awaiting_approval" | "succeeded" | "failed" | "skipped";
 

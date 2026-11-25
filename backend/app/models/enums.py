@@ -73,6 +73,21 @@ class ApprovalStatus(enum.StrEnum):
     CANCELLED = "cancelled"  # the run was cancelled or ended before anyone decided
 
 
+class RunEventType(enum.StrEnum):
+    """What changed on a run. Events say that something changed, never what the data was."""
+
+    QUEUED = "run.queued"
+    STARTED = "run.started"
+    STEP_STARTED = "step.started"
+    STEP_FINISHED = "step.finished"
+    APPROVAL_REQUESTED = "approval.requested"
+    APPROVAL_DECIDED = "approval.decided"  # also for expired and cancelled (decided by the system)
+    AWAITING_APPROVAL = "run.awaiting_approval"
+    RESUMED = "run.resumed"
+    FINISHED = "run.finished"  # succeeded or failed (see data.status)
+    CANCELLED = "run.cancelled"
+
+
 class MessageRole(enum.StrEnum):
     USER = "user"
     ASSISTANT = "assistant"

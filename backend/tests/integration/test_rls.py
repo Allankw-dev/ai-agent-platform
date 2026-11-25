@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import pytest
 from sqlalchemy import Connection, Engine, create_engine, text
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 
 from tests.integration.seed import TENANT_TABLES, OrgData, seed_org, seed_tool
 
@@ -160,7 +160,7 @@ def test_cannot_update_or_delete_another_organizations_rows(world: World) -> Non
         )
         assert updated.rowcount == 0
         for table in TENANT_TABLES:
-            if table in ("audit_logs", "agent_versions", "agent_tools"):
+            if table in ("audit_logs", "agent_versions", "agent_tools", "run_events"):
                 continue  # append-only / immutable, covered separately
             deleted = conn.execute(
                 text(f"DELETE FROM {table} WHERE org_id = :o"), {"o": world.b.org}
@@ -373,3 +373,23 @@ def test_agent_versions_are_immutable_for_the_runtime_role(world: World) -> None
             ),
             {"o": world.a.org, "a": world.a.agent},
         )
+
+
+def test_run_events_are_scoped_and_append_only(world: World) -> None:
+    """The event log can be read and added to inside the organization, never rewritten."""
+    with world.owner.connect() as conn:
+        run_a = _ids(conn, "SELECT id FROM agent_runs WHERE org_id = :o", o=world.a.org).pop()
+        run_b = _ids(conn, "SELECT id FROM agent_runs WHERE org_id = :o", o=world.b.org).pop()
+    for sql in ("UPDATE run_events SET type = 'run.finished'", "DELETE FROM run_events"):
+        with pytest.raises(ProgrammingError), acting_as(world, org=world.a.org) as conn:
+            conn.execute(text(sql))
+    insert = "INSERT INTO run_events (org_id, run_id, seq, type) VALUES (:o, :r, :s, 'run.started')"
+    with acting_as(world, org=world.a.org) as conn:
+        conn.execute(text(insert), {"o": world.a.org, "r": run_a, "s": 2})
+        assert _scalar(conn, "SELECT count(*) FROM run_events") == 2
+    # Not into another organization, not even for a run that exists there.
+    with pytest.raises(ProgrammingError), acting_as(world, org=world.a.org) as conn:
+        conn.execute(text(insert), {"o": world.b.org, "r": run_b, "s": 2})
+    # Sequence numbers are unique per run.
+    with pytest.raises(IntegrityError), acting_as(world, org=world.a.org) as conn:
+        conn.execute(text(insert), {"o": world.a.org, "r": run_a, "s": 1})

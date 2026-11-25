@@ -48,8 +48,9 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         # Every custom header the browser sends must be listed, or its preflight check fails and
-        # the request never leaves the browser. Idempotency-Key is sent when starting a run.
-        allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
+        # the request never leaves the browser. Idempotency-Key is sent when starting a run, and
+        # Last-Event-ID by clients that resume a run's event stream.
+        allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "Last-Event-ID"],
     )
 
     app.add_exception_handler(ApiError, api_error_handler)  # type: ignore[arg-type]

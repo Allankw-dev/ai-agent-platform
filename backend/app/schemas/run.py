@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.enums import RunStatus, RunTrigger, StepStatus, StepType
+from app.models.enums import RunEventType, RunStatus, RunTrigger, StepStatus, StepType
 from app.schemas.approval import ApprovalSummary
 
 
@@ -61,3 +61,18 @@ class RunDetail(RunRead):
     steps: list[RunStepRead]
     # Set while the run waits for a person's decision.
     pending_approval: ApprovalSummary | None = None
+
+
+class RunEventRead(BaseModel):
+    """One thing that happened to a run. `data` holds ids and statuses only."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    seq: int
+    type: RunEventType
+    data: dict[str, Any]
+    created_at: datetime
+
+
+class RunEventList(BaseModel):
+    items: list[RunEventRead]

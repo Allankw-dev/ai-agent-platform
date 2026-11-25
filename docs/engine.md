@@ -119,6 +119,50 @@ A failed model call shows its reason in the run's `error` field and on the faile
 An overloaded or slow model is not retried when its failure already took more than 15 seconds,
 because retrying would only use up the run's time limit.
 
+## Run events and streaming
+
+Besides its steps, every run keeps an append-only **event log** (`run_events`, Phase 5A): a short
+record of each change, numbered `seq` 1, 2, 3 ... per run with no gaps.
+
+| Event | When |
+| --- | --- |
+| `run.queued` | the run was created |
+| `run.started` | a worker picked it up |
+| `step.started`, `step.finished` | a model call or tool call began or ended (`data`: step id, type, tool key, status) |
+| `approval.requested` | a risky action is waiting for a person |
+| `run.awaiting_approval` | the run paused and released its worker |
+| `approval.decided` | a person approved or rejected, or it expired or was cancelled (`data.decision`) |
+| `run.resumed` | a worker carried on after the decision |
+| `run.finished` | succeeded or failed (`data.status`) |
+| `run.cancelled` | cancelled; always the last event of such a run |
+
+Rules the code keeps:
+
+- An event is written **in the same transaction** as the change it describes (`run_events.emit`
+  from the repository or recorder that makes the change), so they commit together. A reader that
+  sees a finished run is guaranteed to find its last event.
+- The number comes from one atomic `UPDATE` of `agent_runs.event_seq`, so two writers (a worker and
+  a person cancelling) never take the same number.
+- `data` holds ids, statuses and counts **only**. Never tool arguments, tool output or message text:
+  an event can never leak what a step handled. Clients fetch details with `GET /runs/{id}`.
+- The log is append-only for the application's database role, like the audit log, and has Row Level
+  Security like every tenant table.
+
+Reading it:
+
+- `GET /organizations/{org}/runs/{run}/events?after=<seq>&limit=` returns events as JSON (replay).
+- `GET /organizations/{org}/runs/{run}/events/stream?after=<seq>` is a server-sent event stream.
+  Each frame has `id: <seq>`, `event: <type>` and a JSON `data:` line. Keep-alive comments
+  (`: keep-alive`) are sent while nothing happens. The stream ends when the run finishes, and after
+  `RUN_STREAM_MAX_SECONDS` (300) otherwise: **reconnect with `after=<last seq seen>`** (or the
+  standard `Last-Event-ID` header) and you receive only what you missed. The server looks for new
+  events every `RUN_STREAM_POLL_SECONDS` (1) and keeps no database connection between looks.
+- Browsers' `EventSource` cannot send an `Authorization` header, so the web app (and anything else)
+  reads the stream with `fetch` and the same bearer token as any other call
+  (`frontend/src/lib/run-events.ts`). The run page refreshes when an event arrives, checks only
+  every 30 seconds while connected, and falls back to checking every 2 seconds if no stream can be
+  opened. Try it from PowerShell with `scripts/watch-run.ps1`.
+
 ## Lifecycle and failure handling
 
 - Starting a run is refused up front (503 `ai_not_configured`) if the agent's provider has no key.
@@ -145,4 +189,4 @@ because retrying would only use up the run's time limit.
 ## Not yet
 
 - Conversation memory: `memory_config` is stored on versions but runs are single-turn.
-- Streaming output, retries of failed runs, schedules and webhooks.
+- Streaming of the model's text as it is written, retries of failed runs, schedules and webhooks.

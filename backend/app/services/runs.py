@@ -11,10 +11,11 @@ from app.api.context import OrgContext
 from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.db.tenancy import use_tenant
-from app.models.enums import AgentStatus, LLMProvider, RunStatus, RunTrigger
+from app.models.enums import AgentStatus, LLMProvider, RunEventType, RunStatus, RunTrigger
 from app.models.runs import AgentRun, RunStep
 from app.repositories import agents as agent_repo
 from app.repositories import approvals as approval_repo
+from app.repositories import run_events
 from app.repositories import runs as run_repo
 from app.schemas.run import RunCreate, RunDetail, RunRead, RunStepRead
 from app.services import approvals as approval_service
@@ -177,6 +178,7 @@ async def create_run(
             raise
         return await _existing(session, existing, agent_id), False
 
+    await run_events.emit(session, run.id, RunEventType.QUEUED)
     await audit.record(
         session,
         org_id=ctx.org_id,
@@ -193,13 +195,18 @@ async def create_run(
     except Exception as exc:
         log.exception("runs.dispatch_failed", run_id=str(run.id))
         # Free the idempotency key so the caller can simply retry.
-        await session.execute(
+        failed = await session.execute(
             update(AgentRun)
             .where(AgentRun.id == run.id, AgentRun.status == RunStatus.QUEUED)
             .values(
                 status=RunStatus.FAILED, error="The run could not be queued.", idempotency_key=None
             )
+            .returning(AgentRun.id)
         )
+        if failed.first() is not None:
+            await run_events.emit(
+                session, run.id, RunEventType.FINISHED, {"status": RunStatus.FAILED.value}
+            )
         await session.commit()
         raise ApiError(503, "queue_unavailable", "The run could not be queued. Try again.") from exc
 
@@ -234,6 +241,7 @@ async def cancel_run(session: AsyncSession, ctx: OrgContext, run_id: uuid.UUID) 
             details={"run_id": str(run_id)},
         )
     await run_repo.end_awaiting_steps(session, [run_id], approval_service.ENDED_STEP)
+    await run_events.emit(session, run_id, RunEventType.CANCELLED)  # always the last event
     await audit.record(
         session,
         org_id=ctx.org_id,
