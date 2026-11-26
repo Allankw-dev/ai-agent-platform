@@ -40,6 +40,9 @@ class Limits(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     max_iterations: int = Field(default=10, ge=1)
+    # Tool calls per run, counting every attempt (also failed ones). Versions saved before this
+    # limit existed simply read the default.
+    max_tool_calls: int = Field(default=20, ge=1)
     timeout_seconds: int = Field(default=120, ge=5)
     max_total_tokens: int = Field(default=50_000, ge=1_000)
     cost_budget_usd: float | None = Field(default=None, gt=0)

@@ -62,6 +62,9 @@ class Api:
     async def post(self, email: str, path: str, **kw: Any) -> httpx.Response:
         return await self.request(email, "POST", path, **kw)
 
+    async def put(self, email: str, path: str, **kw: Any) -> httpx.Response:
+        return await self.request(email, "PUT", path, **kw)
+
     async def patch(self, email: str, path: str, **kw: Any) -> httpx.Response:
         return await self.request(email, "PATCH", path, **kw)
 

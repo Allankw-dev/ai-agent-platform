@@ -105,6 +105,7 @@ async def _validate_config(
     limits = config.limits
     ceilings: list[tuple[str, float | int | None, float | int]] = [
         ("max_iterations", limits.max_iterations, settings.agent_max_iterations_ceiling),
+        ("max_tool_calls", limits.max_tool_calls, settings.agent_max_tool_calls_ceiling),
         ("timeout_seconds", limits.timeout_seconds, settings.agent_timeout_ceiling_seconds),
         ("max_total_tokens", limits.max_total_tokens, settings.agent_token_budget_ceiling),
         ("cost_budget_usd", limits.cost_budget_usd, settings.agent_cost_budget_ceiling_usd),

@@ -137,6 +137,19 @@ async def api(runtime_url: str, engine: Engine) -> AsyncIterator["Api"]:
     await runtime_engine.dispose()
 
 
+@pytest.fixture(autouse=True)
+def generous_org_limits(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Most tests start many runs in one organization; only the quota tests want tight limits.
+
+    They set their own through the API (an organization's own limits override these defaults).
+    """
+    monkeypatch.setenv("ORG_DEFAULT_MAX_CONCURRENT_RUNS", "1000")
+    monkeypatch.setenv("ORG_DEFAULT_DAILY_TOKEN_QUOTA", "2000000000")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 @pytest.fixture
 def gemini_key(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Make the platform believe a Gemini key is configured (no real call is ever made)."""

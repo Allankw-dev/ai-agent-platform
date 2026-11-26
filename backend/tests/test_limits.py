@@ -53,3 +53,15 @@ def test_no_cost_budget_means_no_cost_limit() -> None:
     assert limits.cost_budget_micro_usd is None
     assert limits.cost_budget_usd is None
     assert limits.max_iterations == 10  # the schema defaults apply
+
+
+def test_the_tool_call_limit_defaults_to_twenty_and_is_capped_by_the_ceiling() -> None:
+    assert effective_limits({}, settings()).max_tool_calls == 20
+    assert effective_limits({"max_tool_calls": 7}, settings()).max_tool_calls == 7
+    capped = effective_limits({"max_tool_calls": 50}, settings(agent_max_tool_calls_ceiling=10))
+    assert capped.max_tool_calls == 10
+
+
+def test_a_version_saved_before_the_tool_call_limit_existed_still_loads() -> None:
+    old = {"max_iterations": 3, "timeout_seconds": 30, "max_total_tokens": 2_000}
+    assert effective_limits(old, settings()).max_tool_calls == 20

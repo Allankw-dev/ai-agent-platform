@@ -10,6 +10,7 @@ erDiagram
     users ||--o{ organization_members : "joins"
     organizations ||--o{ organization_members : "has"
     organizations ||--o{ organization_invitations : "invites"
+    organizations ||--o| org_limits : "may set"
     organizations ||--o{ agents : "owns"
     agents ||--o{ agent_versions : "has versions"
     agents ||--o| agent_versions : "current_version"
@@ -39,7 +40,8 @@ erDiagram
     agent_tools { uuid id PK; uuid agent_version_id FK; uuid tool_id FK; bool requires_approval }
     integrations { uuid id PK; uuid org_id FK; string provider; string name }
     credentials { uuid id PK; uuid integration_id FK "UK"; bytes encrypted_payload; int key_version; uuid set_by_id FK }
-    agent_runs { uuid id PK; uuid agent_id FK; uuid agent_version_id FK; string status; string idempotency_key; numeric cost_usd; jsonb checkpoint; timestamptz last_resumed_at }
+    org_limits { uuid id PK; uuid org_id FK; int max_concurrent_runs; int daily_token_quota; numeric daily_cost_quota_usd }
+    agent_runs { uuid id PK; uuid agent_id FK; uuid agent_version_id FK; string status; string idempotency_key; numeric cost_usd; int reserved_tokens; numeric reserved_cost_usd; int event_seq; jsonb checkpoint; timestamptz last_resumed_at }
     run_events { uuid id PK; uuid run_id FK; int seq; string type; json data }
     run_steps { uuid id PK; uuid run_id FK; int sequence; string step_type; string status }
     approvals { uuid id PK; uuid run_id FK; uuid run_step_id FK; string tool_key; jsonb proposed_input; string status; timestamptz expires_at; uuid decided_by_id FK }

@@ -1,7 +1,18 @@
 # Phase 5 design: run reliability and quotas
 
-Status: **approved** (all eight decisions accepted as recommended). 5A is built and tested;
-5B to 5E are not started.
+Status: **approved** (all eight decisions accepted as recommended). 5A and 5B are built and
+tested; 5C to 5E are not started.
+
+Changes made while building 5B, all small:
+
+- Developers can **read** the limits and usage (they start the runs that use the quota, and a
+  refused run quotes the numbers anyway). Only owners and admins change them. The design said only
+  owners and admins could read them.
+- Two refusals the design did not name: `409 run_exceeds_daily_quota` (the agent's own budget is
+  bigger than the whole quota, so waiting cannot help) and `409 cost_quota_needs_price`.
+- The provider limiter's per-minute setting is `PROVIDER_CALLS_PER_MINUTE` (the design said
+  `PROVIDER_RPM`), and a slot is held through the Gemini client's own retries.
+- `DELETE /limits` resets an organization to the platform defaults.
 
 Goal: before schedules, webhooks and API keys can start runs with nobody watching (Phase 6), runs
 must be observable live, bounded by quotas, and recoverable after a worker dies.

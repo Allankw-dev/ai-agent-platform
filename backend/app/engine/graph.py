@@ -66,6 +66,7 @@ class Outcome(StrEnum):
     REFUSED = "refused"
     LLM_ERROR = "llm_error"
     ITERATION_LIMIT = "iteration_limit"
+    TOOL_CALL_LIMIT = "tool_call_limit"
     TOKEN_LIMIT = "token_limit"  # noqa: S105 (an outcome label, not a secret)
     COST_LIMIT = "cost_limit"
     CANCELLED = "cancelled"
@@ -78,6 +79,9 @@ class EngineState(TypedDict, total=False):
     # Results of this reply's tool calls that already ran, in order (kept across a pause).
     collected_results: list[dict[str, Any]]
     iterations: int
+    # Tool calls attempted so far (a call that waited for approval counts once). Checkpoints saved
+    # before this counter existed read it as 0.
+    tool_calls: int
     input_tokens: int
     output_tokens: int
     cost_micro_usd: int
@@ -131,6 +135,7 @@ def initial_state(message: str) -> EngineState:
         "pending_tool_calls": [],
         "collected_results": [],
         "iterations": 0,
+        "tool_calls": 0,
         "input_tokens": 0,
         "output_tokens": 0,
         "cost_micro_usd": 0,
@@ -154,6 +159,7 @@ def checkpoint_from_state(state: EngineState) -> dict[str, Any]:
         "pending_tool_calls": state.get("pending_tool_calls", []),
         "collected_results": state.get("collected_results", []),
         "iterations": state["iterations"],
+        "tool_calls": state.get("tool_calls", 0),
         "input_tokens": state["input_tokens"],
         "output_tokens": state["output_tokens"],
         "cost_micro_usd": state["cost_micro_usd"],
@@ -175,6 +181,7 @@ def state_from_checkpoint(
         "pending_tool_calls": checkpoint["pending_tool_calls"],
         "collected_results": checkpoint["collected_results"],
         "iterations": checkpoint["iterations"],
+        "tool_calls": checkpoint.get("tool_calls", 0),
         "input_tokens": checkpoint["input_tokens"],
         "output_tokens": checkpoint["output_tokens"],
         "cost_micro_usd": checkpoint["cost_micro_usd"],
@@ -431,8 +438,16 @@ def build_graph(deps: EngineDeps) -> Any:
                 }
             )
 
+        used = state.get("tool_calls", 0)
         while remaining:
+            if used >= config.limits.max_tool_calls:
+                return {
+                    "outcome": Outcome.TOOL_CALL_LIMIT.value,
+                    "tool_calls": used,
+                    "resume": None,
+                }
             raw = remaining.pop(0)
+            used += 1
             call = ToolCall(id=raw["id"], name=raw["name"], args=raw["args"])
             outcome = await run_one_tool(call, state.get("final_text", ""))
             if isinstance(outcome, Paused):
@@ -441,6 +456,7 @@ def build_graph(deps: EngineDeps) -> Any:
                     "awaiting": outcome.awaiting,
                     "collected_results": results,
                     "pending_tool_calls": remaining,
+                    "tool_calls": used,
                     "resume": None,
                 }
             results.append(
@@ -453,6 +469,7 @@ def build_graph(deps: EngineDeps) -> Any:
             )
         return {
             "messages": [*state["messages"], tool_message(results)],
+            "tool_calls": used,
             "pending_tool_calls": [],
             "collected_results": [],
             "awaiting": {},

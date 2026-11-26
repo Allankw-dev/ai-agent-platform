@@ -101,6 +101,7 @@ export function version(number: number, overrides: Partial<VersionRead> = {}): V
     memory_config: { conversation_memory: true, max_history_messages: 20 },
     limits: {
       max_iterations: 10,
+      max_tool_calls: 20,
       timeout_seconds: 120,
       max_total_tokens: 50_000,
       cost_budget_usd: null,

@@ -53,6 +53,12 @@ Frontend (in `frontend/`, Node 22, Next.js 16 with Cache Components enabled):
 - Every change to a run's state (started, finished, cancelled, paused, resumed, a step, an approval)
   writes a run event in the same transaction through `run_events.emit`. Event `data` holds ids and
   statuses only, never tool arguments, tool output or message text (see `docs/engine.md`).
+- A run reserves its share of the organization's quota in `create_run` (`quota_service.reserve_for_run`),
+  in the same transaction that inserts it, under the per-organization lock. Never count runs or
+  tokens in memory, and never add a separate "settle" step: reservations live on `agent_runs` and
+  count only while the run is open (see `docs/engine.md`, "Organization limits and quotas").
+- A model call goes through the provider limiter (`get_llm_client` wraps the client); a new
+  provider's client must be wrapped the same way.
 - Delivering changes as zips: a zip cannot delete files, so list deleted or moved files explicitly.
 - No decorative UI: every control must work.
 - Commit at logical milestones with clear messages.
@@ -67,6 +73,6 @@ Frontend (in `frontend/`, Node 22, Next.js 16 with Cache Components enabled):
       decisions accepted as recommended). [x] 4A vault and Integrations tab, [x] 4B HTTP tools,
       [x] 4C Slack, [x] 4D approvals backend, [x] 4E approval screens, [x] 4F acceptance and cleanup
 - [ ] Phase 5: Run reliability and quotas. Design in `docs/phase5-design.md`, approved (all eight
-      decisions accepted as recommended). [x] 5A run events and streaming (built, awaiting
-      acceptance), [ ] 5B limits and quotas, [ ] 5C crash recovery, [ ] 5D observability and audit,
+      decisions accepted as recommended). [x] 5A run events and streaming (accepted), [x] 5B limits and quotas
+      (built, awaiting acceptance), [ ] 5C crash recovery, [ ] 5D observability and audit,
       [ ] 5E emergency stop

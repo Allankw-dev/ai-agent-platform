@@ -27,6 +27,7 @@ def paused_state() -> EngineState:
             "pending_tool_calls": [{"id": "c2", "name": "y", "args": {"a": 1}}],
             "collected_results": [{"id": "c0", "name": "z", "content": "ok", "is_error": False}],
             "iterations": 3,
+            "tool_calls": 2,
             "input_tokens": 120,
             "output_tokens": 45,
             "cost_micro_usd": 99,
@@ -132,3 +133,17 @@ def test_the_expiry_setting_refuses_silly_values(hours: int) -> None:
 
 def test_the_default_expiry_is_24_hours() -> None:
     assert Settings(_env_file=None).approval_expiry_hours == 24
+
+
+def test_the_tool_call_count_survives_a_pause() -> None:
+    checkpoint = json.loads(json.dumps(checkpoint_from_state(paused_state())))
+    assert checkpoint["tool_calls"] == 2
+    rebuilt = state_from_checkpoint(checkpoint, decision="approved", note=None, arguments={})
+    assert rebuilt["tool_calls"] == 2
+
+
+def test_a_run_paused_before_the_counter_existed_resumes_with_zero() -> None:
+    checkpoint = json.loads(json.dumps(checkpoint_from_state(paused_state())))
+    del checkpoint["tool_calls"]  # what an older worker saved
+    rebuilt = state_from_checkpoint(checkpoint, decision="approved", note=None, arguments={})
+    assert rebuilt["tool_calls"] == 0

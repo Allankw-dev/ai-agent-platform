@@ -24,6 +24,7 @@ export const MODEL_SUGGESTIONS = [
 /** The platform's default ceilings (the API enforces the real ones and explains any refusal). */
 export const LIMITS = {
   maxIterations: { min: 1, max: 25 },
+  maxToolCalls: { min: 1, max: 100 },
   timeoutSeconds: { min: 5, max: 300 },
   maxTotalTokens: { min: 1_000, max: 500_000 },
   costBudgetUsd: { max: 5 },
@@ -82,6 +83,7 @@ export type AgentFormValues = {
   objectives: string;
   tools: ToolSelection[];
   maxIterations: string;
+  maxToolCalls: string;
   timeoutSeconds: string;
   maxTotalTokens: string;
   costBudget: string;
@@ -98,6 +100,7 @@ export type AgentFormField =
   | "instructions"
   | "objectives"
   | "maxIterations"
+  | "maxToolCalls"
   | "timeoutSeconds"
   | "maxTotalTokens"
   | "costBudget"
@@ -116,6 +119,7 @@ export function emptyFormValues(): AgentFormValues {
     objectives: "",
     tools: [],
     maxIterations: "10",
+    maxToolCalls: "20",
     timeoutSeconds: "120",
     maxTotalTokens: "50000",
     costBudget: "",
@@ -148,6 +152,7 @@ export function valuesFromAgent(agent: AgentRead): AgentFormValues {
       provider: tool.provider,
     })),
     maxIterations: String(limits.max_iterations ?? base.maxIterations),
+    maxToolCalls: String(limits.max_tool_calls ?? base.maxToolCalls),
     timeoutSeconds: String(limits.timeout_seconds ?? base.timeoutSeconds),
     maxTotalTokens: String(limits.max_total_tokens ?? base.maxTotalTokens),
     costBudget: limits.cost_budget_usd == null ? "" : String(limits.cost_budget_usd),
@@ -207,6 +212,8 @@ export function validateAgentForm(
 
   const iterations = checkWholeNumber(values.maxIterations, LIMITS.maxIterations, "model calls");
   if (iterations) errors.maxIterations = iterations;
+  const toolCalls = checkWholeNumber(values.maxToolCalls, LIMITS.maxToolCalls, "tool calls");
+  if (toolCalls) errors.maxToolCalls = toolCalls;
   const timeout = checkWholeNumber(values.timeoutSeconds, LIMITS.timeoutSeconds, "seconds");
   if (timeout) errors.timeoutSeconds = timeout;
   const tokens = checkWholeNumber(values.maxTotalTokens, LIMITS.maxTotalTokens, "tokens");
@@ -254,6 +261,7 @@ export function toAgentConfig(values: AgentFormValues): AgentConfigInput {
     memory_config: values.memory,
     limits: {
       max_iterations: Number(values.maxIterations.trim()),
+      max_tool_calls: Number(values.maxToolCalls.trim()),
       timeout_seconds: Number(values.timeoutSeconds.trim()),
       max_total_tokens: Number(values.maxTotalTokens.trim()),
       cost_budget_usd: budget ? Number(budget) : null,

@@ -420,6 +420,15 @@ export function AgentForm({
             hint={`${LIMITS.maxIterations.min} to ${LIMITS.maxIterations.max}`}
           />
           <Field
+            id="limit-tool-calls"
+            label="Tool calls per run"
+            inputMode="numeric"
+            value={values.maxToolCalls}
+            onChange={text("maxToolCalls")}
+            error={errors.maxToolCalls}
+            hint={`${LIMITS.maxToolCalls.min} to ${LIMITS.maxToolCalls.max}`}
+          />
+          <Field
             id="limit-timeout"
             label="Time limit (seconds)"
             inputMode="numeric"

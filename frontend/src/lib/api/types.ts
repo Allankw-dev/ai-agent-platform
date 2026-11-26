@@ -54,6 +54,7 @@ export type MemoryConfig = { conversation_memory: boolean; max_history_messages:
 
 export type Limits = {
   max_iterations: number;
+  max_tool_calls: number;
   timeout_seconds: number;
   max_total_tokens: number;
   cost_budget_usd: number | null;
@@ -259,4 +260,48 @@ export type Approval = {
   decided_by_name: string | null;
   decided_at: string | null;
   decision_note: string | null;
+};
+
+/** An organization's run limits. `customized` is false while the platform defaults apply. */
+export type OrgLimits = {
+  max_concurrent_runs: number;
+  daily_token_quota: number;
+  daily_cost_quota_usd: number | null;
+  customized: boolean;
+  updated_at: string | null;
+};
+export type OrgLimitsInput = {
+  max_concurrent_runs: number;
+  daily_token_quota: number;
+  daily_cost_quota_usd: number | null;
+};
+export type UsageToday = {
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+  /** What runs still in progress may yet use (their reservation minus what they have spent). */
+  reserved_tokens: number;
+  /** Runs queued or running right now. */
+  busy_runs: number;
+  resets_at: string;
+};
+export type UsageDay = {
+  day: string;
+  runs: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+};
+export type AgentUsage = {
+  agent_id: string;
+  agent_name: string;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+};
+export type Usage = {
+  limits: OrgLimits;
+  today: UsageToday;
+  days: UsageDay[];
+  by_agent: AgentUsage[];
 };

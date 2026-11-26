@@ -35,12 +35,18 @@ approval (sensitive tools always do) **pauses the run** instead of running. See 
 
 ## Limits
 
-An agent version has `max_iterations`, `timeout_seconds`, `max_total_tokens` and an optional
-`cost_budget_usd`, each capped by the platform ceilings (`AGENT_*_CEILING`). The ceilings are
-applied again when a run starts, so lowering one also constrains older versions.
+An agent version has `max_iterations`, `max_tool_calls`, `timeout_seconds`, `max_total_tokens` and
+an optional `cost_budget_usd`, each capped by the platform ceilings (`AGENT_*_CEILING`). The
+ceilings are applied again when a run starts, so lowering one also constrains older versions. These
+are limits of one run; limits of a whole organization are in "Organization limits and quotas" below.
 
 - Iterations, tokens and cost are checked **before each model call**, so a run can overshoot a
   token or cost limit by at most one call.
+- **Tool calls** (`max_tool_calls`, default 20, ceiling 100) are counted when each call starts, and
+  every attempt counts, failed ones too. A reply that asks for more calls than remain runs the ones
+  that fit and then stops. A call that waited for approval counts once, not again when it resumes.
+  The count is saved in checkpoints (older checkpoints without it read as 0). Versions saved before
+  this limit existed read the default.
 - After a tool's arguments pass its schema, an optional per-tool *preparer* turns them into their final
   form (for Slack, the message text made inert) before the tool runs; see `docs/slack-tool.md`.
 - **Pause and resume.** When an action needs approval the graph ends early; the executor saves the
@@ -118,6 +124,56 @@ A failed model call shows its reason in the run's `error` field and on the faile
 
 An overloaded or slow model is not retried when its failure already took more than 15 seconds,
 because retrying would only use up the run's time limit.
+
+## Organization limits and quotas
+
+A whole organization is also bounded (Phase 5B), so many runs at once, or a loop of runs started by
+a script, cannot spend without limit. Owners and admins set the limits on the **Usage** tab
+(`GET`/`PUT`/`DELETE /organizations/{org}/limits`); until they do, the platform defaults apply
+(`ORG_DEFAULT_MAX_CONCURRENT_RUNS` 5, `ORG_DEFAULT_DAILY_TOKEN_QUOTA` 500,000,
+`ORG_DEFAULT_DAILY_COST_QUOTA_USD` none).
+
+| Limit | What it counts |
+| --- | --- |
+| Runs at once | Runs `queued` or `running`. A run waiting for a person holds no worker, so it does not count. |
+| Tokens per day | Tokens used since midnight UTC, plus what open runs may still use. |
+| Cost per day (optional) | The same, in estimated US dollars. |
+
+**Reservation.** When a run is created it reserves its token limit (and its cost budget) in the same
+transaction that inserts it, under a per-organization lock (`pg_advisory_xact_lock`), so twelve
+requests arriving together against a limit of five let exactly five in. The reservation lives on the
+run (`reserved_tokens`, `reserved_cost_usd`) and counts only while the run is open. There is no
+"settle" step to forget: a run that succeeds, fails, is cancelled, expires or is cleaned up as an
+orphan stops being open, and its reservation stops counting. While a run is open it holds its
+reservation minus what it has already spent (spending is counted in the day's usage already, so
+counting it again would make every long run look twice as expensive).
+
+A refused start creates nothing and says why, in plain words:
+
+| Status and code | Meaning |
+| --- | --- |
+| `429 concurrency_limit_reached` | Too many runs are queued or running. |
+| `429 daily_quota_reached` | Used plus held plus this run would pass the daily quota. `Retry-After` is the seconds until midnight UTC. |
+| `409 run_exceeds_daily_quota` | This agent's budget alone is bigger than the whole daily quota; waiting would not help. |
+| `409 cost_quota_needs_price` | A cost quota is set but the agent has no cost budget and its model has no price in `MODEL_PRICES`, so its cost cannot be limited. |
+
+Without a cost budget, a run reserves the worst case: its token limit at the model's dearest rate. A
+repeated request with the same `Idempotency-Key` returns the original run before any of this is
+checked, so a retry is never refused for a run that already exists.
+
+`GET /organizations/{org}/usage?days=30` returns today against the quota, a series for the last
+`days` days (empty days included), and the heaviest agents. Usage is the sum of `usage_records`,
+which are written from real model responses.
+
+**Provider limits.** Model providers' own quotas (Gemini's free tier especially) are small and
+shared by every worker, so each model call first takes a slot from a limiter kept in Redis
+(`app/engine/provider_limiter.py`): at most `PROVIDER_MAX_CONCURRENT_CALLS` calls in flight per
+provider (default `{"gemini": 4}`) and optionally `PROVIDER_CALLS_PER_MINUTE`. A slot is a lease that
+expires by itself, so a worker that dies mid-call cannot hold it forever. A call that finds the
+provider full waits up to `PROVIDER_WAIT_SECONDS` (30; the wait counts against the run's time limit)
+and then fails with "the provider is busy"; a slot is held through the Gemini client's own retries.
+If Redis cannot be reached the call goes ahead and a warning is logged: the limiter protects the
+provider's quota, it is not a security control.
 
 ## Run events and streaming
 

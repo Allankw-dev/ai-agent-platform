@@ -117,6 +117,9 @@ describe("AgentForm", () => {
     await user.click(screen.getByRole("checkbox", { name: "Send Slack message" }));
     await user.clear(screen.getByLabelText("Model calls per run"));
     await user.type(screen.getByLabelText("Model calls per run"), "4");
+    expect(screen.getByLabelText("Tool calls per run")).toHaveValue("20");
+    await user.clear(screen.getByLabelText("Tool calls per run"));
+    await user.type(screen.getByLabelText("Tool calls per run"), "6");
     await user.click(screen.getByRole("button", { name: "Create agent" }));
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -126,6 +129,7 @@ describe("AgentForm", () => {
       instructions: "You help with maths.",
       model: "gemini-3-flash-preview",
       maxIterations: "4",
+      maxToolCalls: "6",
     });
     expect(values.tools).toEqual([
       { toolKey: "utility.calculate", requiresApproval: true, config: {}, provider: null },
@@ -140,6 +144,8 @@ describe("AgentForm", () => {
     await user.clear(screen.getByLabelText("Model"));
     await user.clear(screen.getByLabelText("Model calls per run"));
     await user.type(screen.getByLabelText("Model calls per run"), "99");
+    await user.clear(screen.getByLabelText("Tool calls per run"));
+    await user.type(screen.getByLabelText("Tool calls per run"), "500");
     await user.click(screen.getByRole("button", { name: "Create agent" }));
 
     expect(onSubmit).not.toHaveBeenCalled();
@@ -148,6 +154,7 @@ describe("AgentForm", () => {
     expect(screen.getByLabelText("Instructions")).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByText("Enter a model name.")).toBeInTheDocument();
     expect(screen.getByText("Use a number from 1 to 25.")).toBeInTheDocument();
+    expect(screen.getByText("Use a number from 1 to 100.")).toBeInTheDocument();
   });
 
   it("suggests models but accepts any valid name", async () => {

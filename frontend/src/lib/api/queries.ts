@@ -19,6 +19,8 @@ import type {
   InvitationAccepted,
   InvitationCreated,
   Member,
+  OrgLimits,
+  OrgLimitsInput,
   OrgRole,
   Organization,
   Page,
@@ -26,6 +28,7 @@ import type {
   RunRead,
   RunStatus,
   ToolInfo,
+  Usage,
   UserProfile,
   VersionRead,
   VersionSummary,
@@ -50,6 +53,8 @@ export const keys = {
   run: (orgId: string, runId: string) => ["run", orgId, runId] as const,
   integrations: (orgId: string) => ["integrations", orgId] as const,
   integrationList: (orgId: string, limit: number) => ["integrations", orgId, limit] as const,
+  usage: (orgId: string) => ["usage", orgId] as const,
+  usageDays: (orgId: string, days: number) => ["usage", orgId, days] as const,
   approvals: (orgId: string) => ["approvals", orgId] as const,
   approvalList: (orgId: string, filters: ApprovalFilters) =>
     ["approvals", orgId, "list", filters] as const,
@@ -630,5 +635,32 @@ export function useDecideApproval(orgId: string, approvalId: string) {
       }),
     onSuccess: refresh,
     onError: refresh,
+  });
+}
+
+/** Today against the daily quota, the last `days` days, the heaviest agents and the limits. */
+export function useUsage(orgId: string, days = 30) {
+  const enabled = useEnabled();
+  return useQuery({
+    queryKey: keys.usageDays(orgId, days),
+    queryFn: () => apiFetch<Usage>(`/organizations/${orgId}/usage`, { query: { days } }),
+    enabled,
+  });
+}
+
+export function useSaveOrgLimits(orgId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: OrgLimitsInput) =>
+      apiFetch<OrgLimits>(`/organizations/${orgId}/limits`, { method: "PUT", body: input }),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.usage(orgId) }),
+  });
+}
+
+export function useResetOrgLimits(orgId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<void>(`/organizations/${orgId}/limits`, { method: "DELETE" }),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.usage(orgId) }),
   });
 }

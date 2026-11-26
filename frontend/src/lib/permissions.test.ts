@@ -12,6 +12,8 @@ import {
   canUpdateOrganization,
   canViewApprovals,
   canViewIntegrations,
+  canViewUsage,
+  canManageLimits,
   invitableRoles,
 } from "@/lib/permissions";
 
@@ -95,6 +97,20 @@ describe("integration permissions (mirror of the API)", () => {
     for (const role of ["developer", "member"] as const) {
       expect(canManageIntegrations(role)).toBe(false);
     }
+  });
+});
+
+describe("usage and limits permissions (mirror of the API)", () => {
+  it("owners, admins and developers see usage and limits; members do not", () => {
+    for (const role of ["owner", "admin", "developer"] as const) {
+      expect(canViewUsage(role)).toBe(true);
+    }
+    expect(canViewUsage("member")).toBe(false);
+  });
+
+  it("only owners and admins change the limits", () => {
+    for (const role of ["owner", "admin"] as const) expect(canManageLimits(role)).toBe(true);
+    for (const role of ["developer", "member"] as const) expect(canManageLimits(role)).toBe(false);
   });
 });
 

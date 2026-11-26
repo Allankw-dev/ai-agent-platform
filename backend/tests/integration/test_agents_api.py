@@ -77,6 +77,7 @@ async def test_creating_an_agent_makes_a_draft_with_version_one(studio: Studio) 
     assert version["version"] == 1 and version["provider"] == "gemini"
     assert version["change_note"] == "Initial version"
     assert version["limits"]["max_iterations"] == 10
+    assert version["limits"]["max_tool_calls"] == 20
     assert {t["tool_key"] for t in version["tools"]} == {
         "utility.current_time",
         "utility.calculate",
@@ -97,6 +98,7 @@ async def test_who_can_create_agents(studio: Studio, who: str, status: int) -> N
         ({"tools": [{"tool_key": "nope.missing"}]}, "unknown_tool"),
         ({"provider": "anthropic"}, "provider_not_enabled"),
         ({"limits": {"max_iterations": 26}}, "limit_exceeds_platform_maximum"),
+        ({"limits": {"max_tool_calls": 101}}, "limit_exceeds_platform_maximum"),
         ({"limits": {"timeout_seconds": 301}}, "limit_exceeds_platform_maximum"),
         ({"limits": {"max_total_tokens": 500_001}}, "limit_exceeds_platform_maximum"),
         ({"limits": {"cost_budget_usd": 5.01}}, "limit_exceeds_platform_maximum"),
@@ -117,6 +119,7 @@ async def test_invalid_configurations_are_refused(
 async def test_limits_at_the_platform_ceiling_are_allowed(studio: Studio) -> None:
     limits = {
         "max_iterations": 25,
+        "max_tool_calls": 100,
         "timeout_seconds": 300,
         "max_total_tokens": 500_000,
         "cost_budget_usd": 5.0,

@@ -3,7 +3,16 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, Numeric, String, text
+from sqlalchemy import (
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import (
@@ -34,6 +43,29 @@ class UsageRecord(UUIDPrimaryKeyMixin, TenantMixin, Base):
         tenant_fk("agent_id", "agents"),
         CheckConstraint("input_tokens >= 0 AND output_tokens >= 0", name="tokens_non_negative"),
         Index("ix_usage_records_org_id_occurred_at", "org_id", "occurred_at"),
+    )
+
+
+class OrgLimits(UUIDPrimaryKeyMixin, TenantMixin, Base):
+    """An organization's own run limits. No row means the platform defaults apply."""
+
+    __tablename__ = "org_limits"
+
+    max_concurrent_runs: Mapped[int] = mapped_column(Integer)
+    daily_token_quota: Mapped[int] = mapped_column(Integer)
+    daily_cost_quota_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    updated_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    updated_at: Mapped[datetime] = now_column()
+
+    __table_args__ = (
+        UniqueConstraint("org_id", name="uq_org_limits_org_id"),
+        CheckConstraint("max_concurrent_runs >= 1", name="concurrency_positive"),
+        CheckConstraint("daily_token_quota >= 1000", name="token_quota_sane"),
+        CheckConstraint(
+            "daily_cost_quota_usd IS NULL OR daily_cost_quota_usd > 0", name="cost_quota_positive"
+        ),
     )
 
 

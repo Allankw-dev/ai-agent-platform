@@ -70,6 +70,8 @@ def failure_message(outcome: Outcome, state: EngineState, limits: EffectiveLimit
             return state.get("error") or "The AI provider returned an error."
         case Outcome.ITERATION_LIMIT:
             return f"Stopped: the agent reached its limit of {limits.max_iterations} model calls."
+        case Outcome.TOOL_CALL_LIMIT:
+            return f"Stopped: the agent reached its limit of {limits.max_tool_calls} tool calls."
         case Outcome.TOKEN_LIMIT:
             return f"Stopped: the agent reached its limit of {limits.max_total_tokens} tokens."
         case Outcome.COST_LIMIT:

@@ -20,6 +20,7 @@ EXPECTED_TABLES = {
     "agent_runs",
     "run_steps",
     "run_events",
+    "org_limits",
     "approvals",
     "conversations",
     "messages",

@@ -17,6 +17,7 @@ TENANT_TABLES = (
     "agent_runs",
     "run_steps",
     "run_events",
+    "org_limits",
     "approvals",
     "conversations",
     "messages",
@@ -108,6 +109,13 @@ def seed_org(conn: Connection, slug: str, tool: uuid.UUID) -> OrgData:
         {"o": org, "r": run},
     )
     conn.execute(text("UPDATE agent_runs SET event_seq = 1 WHERE id = :r"), {"r": run})
+    conn.execute(
+        text(
+            "INSERT INTO org_limits (org_id, max_concurrent_runs, daily_token_quota) "
+            "VALUES (:o, 3, 100000)"
+        ),
+        {"o": org},
+    )
     conn.execute(
         text(
             "INSERT INTO approvals (org_id, run_id, tool_key, proposed_input) "

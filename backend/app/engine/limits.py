@@ -10,6 +10,7 @@ from app.schemas.agent import Limits
 @dataclass(frozen=True)
 class EffectiveLimits:
     max_iterations: int  # model calls per run
+    max_tool_calls: int  # tool calls per run, every attempt counted
     timeout_seconds: int
     max_total_tokens: int
     cost_budget_micro_usd: int | None
@@ -29,6 +30,7 @@ def effective_limits(raw: dict[str, Any], settings: Settings) -> EffectiveLimits
         budget = min(budget, settings.agent_cost_budget_ceiling_usd)
     return EffectiveLimits(
         max_iterations=min(limits.max_iterations, settings.agent_max_iterations_ceiling),
+        max_tool_calls=min(limits.max_tool_calls, settings.agent_max_tool_calls_ceiling),
         timeout_seconds=min(limits.timeout_seconds, settings.agent_timeout_ceiling_seconds),
         max_total_tokens=min(limits.max_total_tokens, settings.agent_token_budget_ceiling),
         cost_budget_micro_usd=None if budget is None else round(budget * 1_000_000),

@@ -29,6 +29,9 @@ class Permission(enum.StrEnum):
     APPROVALS_DECIDE = "approvals:decide"  # approve or reject an agent's action
     INTEGRATIONS_VIEW = "integrations:view"  # list integrations (never their secrets)
     INTEGRATIONS_MANAGE = "integrations:manage"  # add, edit, delete; save or remove a secret
+    USAGE_VIEW = "usage:view"  # token and cost totals, and where they went
+    LIMITS_VIEW = "limits:view"  # the organization's run limits and daily quotas
+    LIMITS_MANAGE = "limits:manage"  # change or reset them
 
 
 _ALL = frozenset(OrgRole)
@@ -51,6 +54,11 @@ GRANTS: dict[Permission, frozenset[OrgRole]] = {
     # change them or their secrets. Members cannot see them at all.
     Permission.INTEGRATIONS_VIEW: frozenset({OrgRole.OWNER, OrgRole.ADMIN, OrgRole.DEVELOPER}),
     Permission.INTEGRATIONS_MANAGE: frozenset({OrgRole.OWNER, OrgRole.ADMIN}),
+    # Developers start the runs that use the quota, so they can see the usage and the limits (a
+    # refused run quotes them anyway); only owners and admins change them.
+    Permission.USAGE_VIEW: frozenset({OrgRole.OWNER, OrgRole.ADMIN, OrgRole.DEVELOPER}),
+    Permission.LIMITS_VIEW: frozenset({OrgRole.OWNER, OrgRole.ADMIN, OrgRole.DEVELOPER}),
+    Permission.LIMITS_MANAGE: frozenset({OrgRole.OWNER, OrgRole.ADMIN}),
 }
 
 

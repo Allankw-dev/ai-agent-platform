@@ -25,11 +25,11 @@ defines its behaviour is saved as an immutable **version**.
 | `objectives` | Optional, up to 4,000 characters. |
 | `model_params` | Only `max_output_tokens`. There is deliberately no temperature: newer models reject non-default values. |
 | `memory_config` | `conversation_memory`, `max_history_messages`. Conversation memory is stored but not used yet (runs are single-turn), so it defaults to off. |
-| `limits` | `max_iterations`, `timeout_seconds`, `max_total_tokens`, optional `cost_budget_usd`. Defaults 10 / 120 / 50,000 / none. |
+| `limits` | `max_iterations`, `max_tool_calls`, `timeout_seconds`, `max_total_tokens`, optional `cost_budget_usd`. Defaults 10 / 20 / 120 / 50,000 / none. |
 | `tools` | Tool keys from the catalog (`GET /tools`), each with `requires_approval` and a small `config`. |
 
-Platform ceilings cap every limit (`AGENT_*_CEILING` settings: 25 iterations, 300 seconds,
-500,000 tokens, $5). A sensitive tool always requires approval; the API forces it even if the
+Platform ceilings cap every limit (`AGENT_*_CEILING` settings: 25 iterations, 100 tool calls,
+300 seconds, 500,000 tokens, $5). A sensitive tool always requires approval; the API forces it even if the
 request says otherwise.
 
 ## Permissions

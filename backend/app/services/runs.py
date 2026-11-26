@@ -11,6 +11,7 @@ from app.api.context import OrgContext
 from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.db.tenancy import use_tenant
+from app.engine.limits import effective_limits
 from app.models.enums import AgentStatus, LLMProvider, RunEventType, RunStatus, RunTrigger
 from app.models.runs import AgentRun, RunStep
 from app.repositories import agents as agent_repo
@@ -20,6 +21,7 @@ from app.repositories import runs as run_repo
 from app.schemas.run import RunCreate, RunDetail, RunRead, RunStepRead
 from app.services import approvals as approval_service
 from app.services import audit
+from app.services import quotas as quota_service
 
 log = structlog.get_logger()
 
@@ -153,12 +155,19 @@ async def create_run(
             f"The {version.provider.value} provider is not configured on this platform.",
         )
 
+    # The organization's limits are checked and this run's share reserved under one lock, in the
+    # same transaction that inserts the run, so simultaneous starts cannot exceed them.
+    reservation = await quota_service.reserve_for_run(
+        session, ctx.org_id, effective_limits(version.limits, get_settings()), version.model
+    )
     run = AgentRun(
         org_id=ctx.org_id,
         agent_id=agent.id,
         agent_version_id=agent.current_version_id,
         status=RunStatus.QUEUED,
         trigger=RunTrigger(body.trigger),
+        reserved_tokens=reservation.tokens,
+        reserved_cost_usd=reservation.cost_usd,
         input={"message": body.message},
         idempotency_key=idempotency_key or None,
         created_by_id=ctx.user.id,

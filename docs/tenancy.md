@@ -25,7 +25,8 @@ it. In practice that is `get_org_context` in `app/api/deps.py` (membership check
 
 | Table | Read | Write |
 | --- | --- | --- |
-| agents, agent_versions, agent_tools, integrations, credentials, agent_runs, run_steps, approvals, conversations, messages, usage_records | `org_id` = current org | `org_id` = current org (checked on insert and update, so rows cannot be moved to another org) |
+| agents, agent_versions, agent_tools, integrations, credentials, agent_runs, run_steps, approvals, conversations, messages, usage_records, org_limits | `org_id` = current org | `org_id` = current org (checked on insert and update, so rows cannot be moved to another org) |
+| run_events | `org_id` = current org | insert only, `org_id` = current org. No update or delete: the event log is append-only (the privileges are revoked as well as the policies left out) |
 | organization_members | current org's rows, plus your own memberships in any org | current org only |
 | organizations | the current org, plus any you belong to | insert only as yourself (`created_by_id`); update/delete current org |
 | users | yourself, plus members of the current org | insert/update yourself only; never delete |

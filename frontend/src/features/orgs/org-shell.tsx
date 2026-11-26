@@ -11,7 +11,12 @@ import { ErrorNotice } from "@/components/error-notice";
 import { OrgProvider } from "@/features/orgs/org-context";
 import { ApiError } from "@/lib/api-client";
 import { useOrganization, usePendingApprovalCount } from "@/lib/api/queries";
-import { ROLE_LABELS, canViewApprovals, canViewIntegrations } from "@/lib/permissions";
+import {
+  ROLE_LABELS,
+  canViewApprovals,
+  canViewIntegrations,
+  canViewUsage,
+} from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 
 export function OrgShell({ children }: { children: React.ReactNode }) {
@@ -55,6 +60,9 @@ export function OrgShell({ children }: { children: React.ReactNode }) {
             count: pending.data ?? 0,
           },
         ]
+      : []),
+    ...(canViewUsage(org.role)
+      ? [{ href: `/orgs/${org.id}/usage`, label: "Usage", exact: false }]
       : []),
     ...(canViewIntegrations(org.role)
       ? [{ href: `/orgs/${org.id}/integrations`, label: "Integrations", exact: false }]

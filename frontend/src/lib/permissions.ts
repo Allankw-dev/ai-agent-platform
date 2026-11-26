@@ -46,6 +46,13 @@ export const canViewIntegrations = (role: OrgRole) =>
 /** Add, edit and delete integrations, and save or remove their secrets. */
 export const canManageIntegrations = (role: OrgRole) => role === "owner" || role === "admin";
 
+/** See token and cost usage, and the organization's run limits. Members cannot. */
+export const canViewUsage = (role: OrgRole) =>
+  role === "owner" || role === "admin" || role === "developer";
+
+/** Change or reset the organization's run limits. */
+export const canManageLimits = (role: OrgRole) => role === "owner" || role === "admin";
+
 /** See approval requests and their exact arguments. Members cannot. */
 export const canViewApprovals = (role: OrgRole) =>
   role === "owner" || role === "admin" || role === "developer";

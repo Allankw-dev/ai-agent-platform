@@ -51,6 +51,11 @@ describe("validateAgentForm", () => {
     ["maxIterations", "ten"],
     ["maxIterations", "1.5"],
     ["maxIterations", ""],
+    ["maxToolCalls", "0"],
+    ["maxToolCalls", "101"],
+    ["maxToolCalls", "many"],
+    ["maxToolCalls", "2.5"],
+    ["maxToolCalls", ""],
     ["timeoutSeconds", "4"],
     ["timeoutSeconds", "301"],
     ["maxTotalTokens", "999"],
@@ -69,6 +74,8 @@ describe("validateAgentForm", () => {
   it.each([
     ["maxIterations", "1"],
     ["maxIterations", "25"],
+    ["maxToolCalls", "1"],
+    ["maxToolCalls", "100"],
     ["timeoutSeconds", "5"],
     ["timeoutSeconds", "300"],
     ["maxTotalTokens", "1000"],
@@ -96,6 +103,7 @@ describe("toAgentConfig", () => {
         model: " gemini-3-flash-preview ",
         objectives: "  ",
         maxIterations: " 7 ",
+        maxToolCalls: " 30 ",
         costBudget: "0.25",
         maxOutputTokens: "2048",
         tools: [
@@ -113,6 +121,7 @@ describe("toAgentConfig", () => {
       memory_config: { conversation_memory: false, max_history_messages: 20 },
       limits: {
         max_iterations: 7,
+        max_tool_calls: 30,
         timeout_seconds: 120,
         max_total_tokens: 50_000,
         cost_budget_usd: 0.25,
@@ -172,6 +181,7 @@ describe("valuesFromAgent", () => {
     });
     const values = valuesFromAgent(old);
     expect(values.maxIterations).toBe("10");
+    expect(values.maxToolCalls).toBe("20");
     expect(values.maxOutputTokens).toBe("");
     expect(values.memory).toEqual({ conversation_memory: false, max_history_messages: 20 });
   });

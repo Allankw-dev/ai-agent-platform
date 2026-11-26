@@ -1,3 +1,4 @@
+from decimal import Decimal
 from functools import lru_cache
 from typing import Literal
 
@@ -61,12 +62,26 @@ class Settings(BaseSettings):
 
     # Platform ceilings for per-agent run limits (agents may choose lower values).
     agent_max_iterations_ceiling: int = 25
+    agent_max_tool_calls_ceiling: int = 100
     agent_timeout_ceiling_seconds: int = 300
     agent_token_budget_ceiling: int = 500_000
     agent_cost_budget_ceiling_usd: float = 5.0
 
     # How long a person has to approve or reject an action before it expires (Phase 4).
     approval_expiry_hours: int = Field(default=24, ge=1, le=168)
+
+    # Run limits for an organization that has not set its own (Phase 5B). A run reserves its token
+    # budget against the daily quota when it is created, so these also bound simultaneous starts.
+    org_default_max_concurrent_runs: int = Field(default=5, ge=1)
+    org_default_daily_token_quota: int = Field(default=500_000, ge=1_000)
+    org_default_daily_cost_quota_usd: Decimal | None = Field(default=None, gt=0)
+
+    # How hard the platform may lean on a model provider, across all workers (Phase 5B). Both are
+    # per provider name; a provider that is not listed is unlimited. Calls wait up to
+    # PROVIDER_WAIT_SECONDS for a free slot and then fail with a clear message.
+    provider_max_concurrent_calls: dict[str, int] = {"gemini": 4}
+    provider_calls_per_minute: dict[str, int] = {}
+    provider_wait_seconds: float = Field(default=30.0, gt=0)
 
     # Live run streaming (Phase 5A): how often the stream looks for new events, how often it
     # sends a keep-alive when nothing happened, and how long one connection lives before the

@@ -49,9 +49,9 @@ export function ConfigSummary({ version }: { version: VersionRead }) {
         )}
       </Row>
       <Row label="Limits per run">
-        {limits.max_iterations ?? "–"} model calls, {limits.timeout_seconds ?? "–"} s,{" "}
-        {limits.max_total_tokens?.toLocaleString("en") ?? "–"} tokens, cost budget{" "}
-        {limits.cost_budget_usd == null ? "none" : `$${limits.cost_budget_usd}`}
+        {limits.max_iterations ?? "–"} model calls, {limits.max_tool_calls ?? "–"} tool calls,{" "}
+        {limits.timeout_seconds ?? "–"} s, {limits.max_total_tokens?.toLocaleString("en") ?? "–"}{" "}
+        tokens, cost budget {limits.cost_budget_usd == null ? "none" : `$${limits.cost_budget_usd}`}
       </Row>
       <Row label="Max reply length">
         {maxOutput == null ? "Model default" : `${maxOutput.toLocaleString("en")} tokens`}

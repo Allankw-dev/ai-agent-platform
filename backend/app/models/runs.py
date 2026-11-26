@@ -66,6 +66,11 @@ class AgentRun(UUIDPrimaryKeyMixin, TenantMixin, Base):
     # Counter behind run_events.seq: each event takes the next number with one atomic UPDATE, so
     # numbers are gap-free per run even with two writers (see repositories/run_events.py).
     event_seq: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    # What this run set aside against the organization's daily quota when it was created (its
+    # token budget, and its cost budget if it has one). It counts only while the run is open, so a
+    # run that ends in any way releases it with no bookkeeping (see repositories/quotas.py).
+    reserved_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    reserved_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
 
     __table_args__ = (
         tenant_fk("agent_id", "agents"),
@@ -73,6 +78,10 @@ class AgentRun(UUIDPrimaryKeyMixin, TenantMixin, Base):
         UniqueConstraint("id", "org_id", name="uq_agent_runs_id_org_id"),
         UniqueConstraint("org_id", "idempotency_key", name="uq_agent_runs_org_id_idempotency_key"),
         CheckConstraint("input_tokens >= 0 AND output_tokens >= 0", name="tokens_non_negative"),
+        CheckConstraint(
+            "reserved_tokens >= 0 AND (reserved_cost_usd IS NULL OR reserved_cost_usd >= 0)",
+            name="reservation_non_negative",
+        ),
         Index("ix_agent_runs_org_id_created_at", "org_id", "created_at"),
         Index("ix_agent_runs_org_id_status", "org_id", "status"),
     )

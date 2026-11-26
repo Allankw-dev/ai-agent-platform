@@ -94,9 +94,12 @@ def get_llm_client(provider: LLMProvider) -> LLMClient:
 
         if settings.gemini_api_key is None:
             raise LLMError("The Gemini provider is not configured (GEMINI_API_KEY is not set).")
-        return GeminiClient(
+        from app.engine.provider_limiter import LimitedLLM, ProviderLimiter
+
+        gemini = GeminiClient(
             api_key=settings.gemini_api_key.get_secret_value(),
             base_url=settings.gemini_base_url,
             timeout=settings.llm_timeout_seconds,
         )
+        return LimitedLLM(gemini, provider.value, ProviderLimiter.from_settings(settings))
     raise LLMError(f"The {provider.value} provider is not implemented yet.")

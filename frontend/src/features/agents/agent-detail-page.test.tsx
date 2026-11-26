@@ -27,6 +27,7 @@ const v2 = version(2, {
   objectives: "Always show your working.",
   limits: {
     max_iterations: 6,
+    max_tool_calls: 12,
     timeout_seconds: 90,
     max_total_tokens: 20_000,
     cost_budget_usd: 0.5,
@@ -74,7 +75,9 @@ describe("AgentDetailPage", () => {
     expect(within(config).getByText("Calculator")).toBeInTheDocument();
     expect(within(config).getByText("Needs approval")).toBeInTheDocument();
     expect(
-      within(config).getByText(/6 model calls, 90 s, 20,000 tokens, cost budget \$0.5/),
+      within(config).getByText(
+        /6 model calls, 12 tool calls, 90 s, 20,000 tokens, cost budget \$0.5/,
+      ),
     ).toBeInTheDocument();
   });
 

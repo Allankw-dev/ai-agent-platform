@@ -319,3 +319,17 @@ async def test_one_rejection_does_not_stop_the_other_calls(
     results = llm.requests[1]["messages"][-1]["results"]
     assert [r["is_error"] for r in results] == [True, False]
     assert (await workspace.detail(run_id))["status"] == "succeeded"
+
+
+async def test_a_call_that_waited_for_approval_counts_once_toward_the_tool_call_limit(
+    workspace: Workspace, runtime_maker: Maker
+) -> None:
+    llm = one_sum()
+    agent_id = await workspace.create_agent(tools=[CALC], limits={"max_tool_calls": 1})
+    run_id = await workspace.new_run(agent_id)
+    await execute_run(uuid.UUID(run_id), uuid.UUID(workspace.org_id), maker=runtime_maker, llm=llm)
+    approval = await waiting(workspace, run_id)
+    await decide(workspace, approval["id"], "approve")
+    await resume(workspace, runtime_maker, llm, run_id)
+    run = await workspace.detail(run_id)
+    assert run["status"] == "succeeded", run["error"]  # the pause and the resume were one call

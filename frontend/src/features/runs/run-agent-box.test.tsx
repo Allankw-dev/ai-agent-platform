@@ -97,6 +97,29 @@ describe("RunAgentBox", () => {
     expect(screen.getByRole("button", { name: "Run agent" })).toBeEnabled();
   });
 
+  it.each([
+    [
+      "concurrency_limit_reached",
+      "This organization already has 5 runs queued or running (the limit is 5). Wait for one to finish, or ask an owner or admin to raise the limit under Usage.",
+    ],
+    [
+      "daily_quota_reached",
+      "This organization has used its daily token quota. It resets at midnight UTC. An owner or admin can raise the quota under Usage.",
+    ],
+  ])(
+    "shows the organization's %s message as written, and lets the person try again",
+    async (code, message) => {
+      routeApi({ [`POST ${START}`]: apiError(429, code, message) });
+      renderBox();
+      const user = userEvent.setup();
+      await user.type(screen.getByLabelText("Message"), "Hello");
+      await user.click(screen.getByRole("button", { name: "Run agent" }));
+      expect(await screen.findByText(message)).toBeInTheDocument();
+      expect(router.push).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Run agent" })).toBeEnabled();
+    },
+  );
+
   it("reuses the same key when the same message is retried, and a new key for a new message", async () => {
     routeApi({
       [`POST ${START}`]: apiError(

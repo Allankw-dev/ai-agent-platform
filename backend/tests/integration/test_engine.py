@@ -288,6 +288,60 @@ async def test_the_iteration_limit_stops_a_looping_agent(
     assert len(run["steps"]) == 4
 
 
+async def test_the_tool_call_limit_stops_an_agent_that_keeps_calling_tools(
+    workspace: Workspace, runtime_maker: Maker
+) -> None:
+    call = call_tools(("utility_calculate", {"expression": "1+1"}))
+    llm = ScriptedLLM(call, call, call)
+    run = await run_agent(
+        workspace,
+        runtime_maker,
+        llm,
+        tools=[CALC],
+        limits={"max_iterations": 8, "max_tool_calls": 2},
+    )
+    assert run["status"] == "failed"
+    assert run["error"] == "Stopped: the agent reached its limit of 2 tool calls."
+    assert len(tool_steps(run)) == 2  # the third was never run
+    assert llm.calls == 3  # and the model was not asked again
+
+
+async def test_the_tool_call_limit_counts_calls_made_together_in_one_reply(
+    workspace: Workspace, runtime_maker: Maker
+) -> None:
+    llm = ScriptedLLM(
+        call_tools(
+            ("utility_calculate", {"expression": "1"}),
+            ("utility_calculate", {"expression": "2"}),
+            ("utility_calculate", {"expression": "3"}),
+        )
+    )
+    run = await run_agent(workspace, runtime_maker, llm, tools=[CALC], limits={"max_tool_calls": 2})
+    assert run["status"] == "failed" and "limit of 2 tool calls" in run["error"]
+    assert [s["output"]["result"] for s in tool_steps(run)] == [1, 2]  # the third never ran
+
+
+async def test_failed_tool_calls_count_too(workspace: Workspace, runtime_maker: Maker) -> None:
+    bad = call_tools(("utility_calculate", {"expression": "1 +"}))
+    llm = ScriptedLLM(bad, bad, bad)
+    run = await run_agent(
+        workspace,
+        runtime_maker,
+        llm,
+        tools=[CALC],
+        limits={"max_iterations": 8, "max_tool_calls": 2},
+    )
+    assert "limit of 2 tool calls" in run["error"]
+
+
+async def test_enough_tool_calls_is_not_a_failure(
+    workspace: Workspace, runtime_maker: Maker
+) -> None:
+    llm = ScriptedLLM(call_tools(("utility_calculate", {"expression": "1+1"})), reply("Two."))
+    run = await run_agent(workspace, runtime_maker, llm, tools=[CALC], limits={"max_tool_calls": 1})
+    assert run["status"] == "succeeded"
+
+
 async def test_the_token_limit(workspace: Workspace, runtime_maker: Maker) -> None:
     llm = ScriptedLLM(
         call_tools(("utility_calculate", {"expression": "1"}), tokens_in=600, tokens_out=500)

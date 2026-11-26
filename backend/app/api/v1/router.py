@@ -8,6 +8,7 @@ from app.api.v1 import (
     integrations,
     invitations,
     organizations,
+    quotas,
     runs,
     tools,
 )
@@ -22,3 +23,4 @@ api_router.include_router(runs.router)
 api_router.include_router(integrations.router)
 api_router.include_router(approvals.router)
 api_router.include_router(tools.router)
+api_router.include_router(quotas.router)

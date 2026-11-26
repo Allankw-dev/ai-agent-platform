@@ -124,6 +124,22 @@ describe("OrgShell", () => {
     expect(await screen.findByRole("link", { name: "Integrations" })).toBeInTheDocument();
   });
 
+  it("has a Usage tab for roles that may see usage, highlighted on its page", async () => {
+    nav.pathname = "/orgs/org-1/usage";
+    routeApi({ "GET /organizations/org-1": ORG });
+    renderWithQuery(<OrgShell>x</OrgShell>);
+    const tab = await screen.findByRole("link", { name: "Usage" });
+    expect(tab).toHaveAttribute("href", "/orgs/org-1/usage");
+    expect(tab).toHaveAttribute("aria-current", "page");
+  });
+
+  it("hides the Usage tab from members", async () => {
+    routeApi({ "GET /organizations/org-1": { ...ORG, role: "member" } });
+    renderWithQuery(<OrgShell>x</OrgShell>);
+    await screen.findByRole("link", { name: "Members" });
+    expect(screen.queryByRole("link", { name: "Usage" })).not.toBeInTheDocument();
+  });
+
   it("hides the Integrations tab from members", async () => {
     routeApi({ "GET /organizations/org-1": { ...ORG, role: "member" } });
     renderWithQuery(<OrgShell>x</OrgShell>);
