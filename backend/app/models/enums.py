@@ -86,6 +86,7 @@ class RunEventType(enum.StrEnum):
     RESUMED = "run.resumed"
     FINISHED = "run.finished"  # succeeded or failed (see data.status)
     CANCELLED = "run.cancelled"
+    RECOVERED = "run.recovered"  # a new worker took the run over after its worker was lost
 
 
 class MessageRole(enum.StrEnum):

@@ -1,7 +1,7 @@
 # Phase 5 design: run reliability and quotas
 
-Status: **approved** (all eight decisions accepted as recommended). 5A and 5B are built and
-tested; 5C to 5E are not started.
+Status: **approved** (all eight decisions accepted as recommended). 5A, 5B and 5C are built and
+tested; 5D and 5E are not started.
 
 Changes made while building 5B, all small:
 
@@ -13,6 +13,23 @@ Changes made while building 5B, all small:
 - The provider limiter's per-minute setting is `PROVIDER_CALLS_PER_MINUTE` (the design said
   `PROVIDER_RPM`), and a slot is held through the Gemini client's own retries.
 - `DELETE /limits` resets an organization to the platform defaults.
+
+Changes made while building 5C:
+
+- **Idempotency was added to the scope** (at your request). Every tool call has a call key that is
+  unique per run in the database, so a call starts at most once however often a task is delivered
+  and a finished call is *replayed* from its recorded result instead of run again. Tools receive a
+  stable `idempotency_key` and `http.request` sends it as an `Idempotency-Key` header on writes.
+  This also makes recovery safe for approved actions that had *finished* before the crash, which the
+  design could only fail. An approved action that had *started* is still never retried.
+- The heartbeat lives in the database (`agent_runs.heartbeat_at`) as well as in Redis; the database
+  decides, Redis only lets the scheduler find candidates (decision 5, unchanged).
+- A task delivered twice for a *running* run no longer fails it: it is ignored if the worker is
+  alive and takes the run over if it is not. Before, a duplicate delivery ended a live run.
+- Resuming after an approval now keeps the saved state (as progress) instead of clearing it, noting
+  only which approval it answers, so a worker lost right after claiming a resumed run is replaceable.
+- `RUN_MAX_ATTEMPTS` counts the first attempt (3 means two recoveries), and each attempt has the
+  agent's full time limit.
 
 Goal: before schedules, webhooks and API keys can start runs with nobody watching (Phase 6), runs
 must be observable live, bounded by quotas, and recoverable after a worker dies.

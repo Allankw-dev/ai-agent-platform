@@ -57,6 +57,13 @@ Frontend (in `frontend/`, Node 22, Next.js 16 with Cache Components enabled):
   in the same transaction that inserts it, under the per-organization lock. Never count runs or
   tokens in memory, and never add a separate "settle" step: reservations live on `agent_runs` and
   count only while the run is open (see `docs/engine.md`, "Organization limits and quotas").
+- Tools that need no approval must be **read-only**: crash recovery runs an interrupted one again.
+  Anything that changes something outside must need approval (be `is_sensitive`), so it is never
+  retried. Every tool call has a call key (`run_steps.call_key`, unique per run); a tool that talks
+  to another service passes `ToolContext.idempotency_key` on so a repeat can be recognised.
+- Every write a worker makes goes through `RunRecorder`, which checks the worker's attempt number
+  first (`RunSuperseded` means another worker took the run over: stop quietly, write nothing).
+  Never write to a running run from the engine by another path.
 - A model call goes through the provider limiter (`get_llm_client` wraps the client); a new
   provider's client must be wrapped the same way.
 - Delivering changes as zips: a zip cannot delete files, so list deleted or moved files explicitly.
@@ -74,5 +81,5 @@ Frontend (in `frontend/`, Node 22, Next.js 16 with Cache Components enabled):
       [x] 4C Slack, [x] 4D approvals backend, [x] 4E approval screens, [x] 4F acceptance and cleanup
 - [ ] Phase 5: Run reliability and quotas. Design in `docs/phase5-design.md`, approved (all eight
       decisions accepted as recommended). [x] 5A run events and streaming (accepted), [x] 5B limits and quotas
-      (built, awaiting acceptance), [ ] 5C crash recovery, [ ] 5D observability and audit,
+      (accepted), [x] 5C crash recovery and idempotency (built, awaiting acceptance), [ ] 5D observability and audit,
       [ ] 5E emergency stop

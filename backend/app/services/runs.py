@@ -64,6 +64,7 @@ def run_read(run: AgentRun, version_number: int, agent_name: str) -> RunRead:
         input_tokens=run.input_tokens,
         output_tokens=run.output_tokens,
         cost_usd=float(run.cost_usd),
+        attempt=run.attempt,
         created_at=run.created_at,
         started_at=run.started_at,
         finished_at=run.finished_at,

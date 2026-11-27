@@ -35,6 +35,7 @@ Browser ──▶ Next.js (Vercel)            Supabase Auth (JWT issuer)
 
 ## Environments
 
-- **Local:** Docker Compose (db, redis, api, worker, frontend).
+- **Local:** Docker Compose (db, redis, api, worker, scheduler, frontend). The scheduler runs
+  `celery beat`, which looks for runs whose worker died.
 - **CI:** GitHub Actions: backend (lint, types, migrations, tests), frontend, e2e, docker build.
 - **Production (Phase 8):** Vercel (web), Render (API and workers), Supabase (database, auth).

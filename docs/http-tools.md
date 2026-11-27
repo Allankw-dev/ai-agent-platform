@@ -32,6 +32,7 @@ string) and `content_type` (`application/json` by default, or `text/plain` or
 | --- | --- |
 | Hosts | Only exact host names on the integration's list. An empty list allows nothing. Read from the integration at call time, so an admin's edit applies to saved agents immediately. |
 | URL | `https` only, standard port 443 only, no `user:pass@`, no IP addresses, ASCII only, at most 2,000 characters. |
+| Retries | A write (POST, PUT, PATCH, DELETE) carries an `Idempotency-Key` header naming that one call; it is the same if the call is ever carried out again after a crash, so services that honour the header recognise the repeat. Agents cannot set it themselves. The platform never repeats a write that had started. |
 | Where it really goes | The platform resolves the host itself and every address must be public. Loopback, private ranges, link-local (including the cloud metadata address 169.254.169.254), shared/CGNAT space, multicast, reserved, IPv6 unique-local and IPv6 forms that wrap an IPv4 address are refused. The connection goes to the address that was checked, so a DNS answer that changes in between cannot reach an internal address. |
 | TLS | Certificates are verified against the host name in the URL. |
 | Headers | The agent cannot set Host, Authorization, Cookie, connection or proxy headers, `Sec-*`, forwarded-for headers, or the integration's own credential header. At most 10 headers; values are plain ASCII without line breaks. |

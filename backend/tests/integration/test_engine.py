@@ -466,18 +466,37 @@ async def test_cancelling_during_a_run_stops_it_and_stays_cancelled(
     assert llm.calls == 1  # no second model call after the cancellation
 
 
-async def test_a_redelivered_running_run_is_failed_not_run_twice(
+async def test_a_task_delivered_again_for_a_run_that_is_running_does_not_run_it_twice(
+    workspace: Workspace, runtime_maker: Maker
+) -> None:
+    """Its worker (as far as anyone can tell) is alive: the duplicate delivery changes nothing."""
+    agent_id = await workspace.create_agent()
+    run_id = await workspace.new_run(agent_id)
+    workspace.api.execute(
+        "UPDATE agent_runs SET status = 'running', heartbeat_at = now() WHERE id = :r", r=run_id
+    )
+    llm = ScriptedLLM()
+    await execute_run(uuid.UUID(run_id), uuid.UUID(workspace.org_id), maker=runtime_maker, llm=llm)
+    run = await workspace.detail(run_id)
+    assert run["status"] == "running" and run["error"] is None and run["attempt"] == 1
+    assert llm.calls == 0
+
+
+async def test_a_run_whose_worker_is_gone_and_left_nothing_to_continue_from_is_ended_plainly(
     workspace: Workspace, runtime_maker: Maker
 ) -> None:
     agent_id = await workspace.create_agent()
     run_id = await workspace.new_run(agent_id)
-    workspace.api.execute("UPDATE agent_runs SET status = 'running' WHERE id = :r", r=run_id)
+    workspace.api.execute(
+        "UPDATE agent_runs SET status = 'running', heartbeat_at = now() - interval '1 hour', "
+        "checkpoint = NULL WHERE id = :r",
+        r=run_id,
+    )
     llm = ScriptedLLM()
     await execute_run(uuid.UUID(run_id), uuid.UUID(workspace.org_id), maker=runtime_maker, llm=llm)
     run = await workspace.detail(run_id)
-    assert run["status"] == "failed"
-    assert "interrupted" in run["error"]
-    assert llm.calls == 0
+    assert run["status"] == "failed" and "nothing had been saved" in run["error"]
+    assert llm.calls == 0  # and it was not started over from the beginning
 
 
 @pytest.mark.parametrize("status", ["succeeded", "failed", "cancelled"])

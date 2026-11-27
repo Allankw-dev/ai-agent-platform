@@ -20,4 +20,11 @@ celery_app.conf.update(
     task_acks_late=True,
     task_reject_on_worker_lost=True,
     broker_connection_retry_on_startup=True,
+    # The scheduler (`celery beat`, the `scheduler` service) looks for runs whose worker died.
+    beat_schedule={
+        "recover-stale-runs": {
+            "task": "agents.recover_stale_runs",
+            "schedule": float(settings.run_recovery_interval_seconds),
+        }
+    },
 )

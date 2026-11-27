@@ -93,6 +93,7 @@ def use(server: LocalHttpsServer, monkeypatch: pytest.MonkeyPatch) -> Any:
         *,
         cfg: dict[str, Any] | None = None,
         secret: str | None = SECRET,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         access = FakeAccess(cfg if cfg is not None else config(), secret)
         context = ToolContext(
@@ -101,6 +102,7 @@ def use(server: LocalHttpsServer, monkeypatch: pytest.MonkeyPatch) -> Any:
             run_id=uuid.uuid4(),
             integrations=access,
             tool_config={"integration_id": str(INTEGRATION_ID)},
+            idempotency_key=idempotency_key,
         )
         handler = get_handler(key)
         assert handler is not None
@@ -250,6 +252,8 @@ async def test_the_allowed_host_list_is_read_fresh_from_the_integration(
         "X-Forwarded-For",
         "Accept-Encoding",
         "User-Agent",
+        "Idempotency-Key",
+        "idempotency-key",
     ],
 )
 async def test_reserved_headers_cannot_be_set(
@@ -481,6 +485,43 @@ async def test_post_sends_the_body_with_its_type_and_length(
     assert seen.headers["content-type"] == "application/json"
     assert seen.headers["content-length"] == str(len(b'{"name": "x"}'))
     assert seen.headers["authorization"] == f"Bearer {SECRET}"
+
+
+@pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE"])
+async def test_every_write_carries_the_calls_idempotency_key(
+    use: Any, server: LocalHttpsServer, method: str
+) -> None:
+    server.on("/items", Reply(status=201, body="{}"))
+    await use(
+        "http.request",
+        {"method": method, "url": f"https://{HOST}/items", "body": "{}"},
+        idempotency_key="key-123",
+    )
+    assert server.seen[0].headers["idempotency-key"] == "key-123"
+
+
+async def test_a_read_does_not_carry_an_idempotency_key(use: Any, server: LocalHttpsServer) -> None:
+    server.on("/data", Reply(body="{}"))
+    await use("http.get", get(), idempotency_key="key-123")
+    assert "idempotency-key" not in server.seen[0].headers
+
+
+async def test_a_write_without_a_key_sends_none_and_still_works(
+    use: Any, server: LocalHttpsServer
+) -> None:
+    server.on("/items", Reply(status=201, body="{}"))
+    await use("http.request", post(body="{}"))
+    assert "idempotency-key" not in server.seen[0].headers
+
+
+async def test_the_agent_cannot_supply_the_key_itself(use: Any, server: LocalHttpsServer) -> None:
+    with pytest.raises(ToolError, match="set by the platform"):
+        await use(
+            "http.request",
+            post(body="{}", headers=[{"name": "Idempotency-Key", "value": "mine"}]),
+            idempotency_key="key-123",
+        )
+    assert server.seen == []
 
 
 @pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE", "post"])

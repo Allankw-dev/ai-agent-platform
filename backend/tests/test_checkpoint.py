@@ -1,6 +1,7 @@
 """The saved state of a run that waits for a person: plain JSON that round-trips exactly."""
 
 import json
+import uuid
 from typing import Any
 
 import pytest
@@ -11,8 +12,11 @@ from app.engine.graph import (
     CHECKPOINT_VERSION,
     EngineState,
     checkpoint_from_state,
+    idempotency_key,
     initial_state,
+    progress_checkpoint,
     state_from_checkpoint,
+    state_from_progress,
 )
 from app.engine.recorder import strip_nul
 
@@ -147,3 +151,80 @@ def test_a_run_paused_before_the_counter_existed_resumes_with_zero() -> None:
     del checkpoint["tool_calls"]  # what an older worker saved
     rebuilt = state_from_checkpoint(checkpoint, decision="approved", note=None, arguments={})
     assert rebuilt["tool_calls"] == 0
+
+
+def test_a_pause_checkpoint_is_marked_as_one() -> None:
+    assert checkpoint_from_state(paused_state())["kind"] == "pause"
+
+
+def test_progress_is_plain_json_and_rebuilds_the_same_loop_state() -> None:
+    state = paused_state()
+    state["awaiting"] = {}
+    saved = json.loads(json.dumps(progress_checkpoint(state)))
+    assert saved["kind"] == "progress" and saved["version"] == CHECKPOINT_VERSION
+    rebuilt = state_from_progress(saved)
+    for key in (
+        "messages",
+        "pending_tool_calls",
+        "collected_results",
+        "iterations",
+        "tool_calls",
+        "input_tokens",
+        "output_tokens",
+        "cost_micro_usd",
+        "final_text",
+    ):
+        assert rebuilt[key] == state[key], key
+    assert rebuilt["resume"] is None and rebuilt["outcome"] == ""
+
+
+def test_progress_after_a_resume_notes_only_which_approval_it_answers() -> None:
+    state = paused_state()
+    state["resume"] = {
+        "awaiting": {"approval_id": "a-1", "step_id": "s-1"},
+        "decision": "approved",
+        "note": "fine",
+        "arguments": {"expression": "secret-looking arguments"},
+    }
+    saved = progress_checkpoint(state)
+    assert saved["resume"] == {"awaiting": {"approval_id": "a-1", "step_id": "s-1"}}
+    assert "secret-looking" not in json.dumps(saved["resume"])
+
+
+def test_progress_and_pause_checkpoints_are_not_mistaken_for_each_other() -> None:
+    pause = checkpoint_from_state(paused_state())
+    with pytest.raises(ValueError):
+        state_from_progress(pause)
+    progress = progress_checkpoint(paused_state())
+    with pytest.raises(ValueError):
+        state_from_checkpoint(progress, decision="approved", note=None, arguments={})
+
+
+@pytest.mark.parametrize("version", [0, 2, 99, "1", None])
+def test_progress_in_an_unknown_format_is_refused_not_guessed(version: Any) -> None:
+    saved = progress_checkpoint(paused_state())
+    saved["version"] = version
+    with pytest.raises(ValueError):
+        state_from_progress(saved)
+
+
+def test_progress_saved_before_the_tool_call_counter_existed_reads_zero() -> None:
+    saved = progress_checkpoint(paused_state())
+    del saved["tool_calls"]
+    assert state_from_progress(saved)["tool_calls"] == 0
+
+
+RUN = uuid.UUID("11111111-2222-3333-4444-555555555555")
+
+
+def test_a_calls_idempotency_key_is_stable_and_names_that_call_only() -> None:
+    first = idempotency_key(RUN, "2.0")
+    assert first == idempotency_key(RUN, "2.0")  # the same after a crash and a recovery
+    assert first != idempotency_key(RUN, "2.1")  # another call of the reply
+    assert first != idempotency_key(RUN, "3.0")  # the same position in another reply
+    assert first != idempotency_key(uuid.uuid4(), "2.0")  # another run
+    assert uuid.UUID(str(first)).version == 5  # a UUID, safe for any service to accept
+
+
+def test_a_call_without_a_key_has_no_idempotency_key() -> None:
+    assert idempotency_key(RUN, None) is None

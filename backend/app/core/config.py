@@ -76,6 +76,15 @@ class Settings(BaseSettings):
     org_default_daily_token_quota: int = Field(default=500_000, ge=1_000)
     org_default_daily_cost_quota_usd: Decimal | None = Field(default=None, gt=0)
 
+    # Crash recovery (Phase 5C). A worker writes a heartbeat every RUN_HEARTBEAT_SECONDS; a running
+    # run whose heartbeat is older than RUN_STALE_SECONDS has lost its worker. The scheduler looks
+    # for such runs every RUN_RECOVERY_INTERVAL_SECONDS and re-queues each from its last checkpoint,
+    # at most RUN_MAX_ATTEMPTS times in all.
+    run_heartbeat_seconds: float = Field(default=15.0, gt=0)
+    run_stale_seconds: float = Field(default=60.0, gt=0)
+    run_recovery_interval_seconds: int = Field(default=30, ge=5)
+    run_max_attempts: int = Field(default=3, ge=1, le=10)
+
     # How hard the platform may lean on a model provider, across all workers (Phase 5B). Both are
     # per provider name; a provider that is not listed is unlimited. Calls wait up to
     # PROVIDER_WAIT_SECONDS for a free slot and then fail with a clear message.

@@ -17,6 +17,7 @@ export function run(overrides: Partial<RunRead> = {}): RunRead {
     input_tokens: 700,
     output_tokens: 150,
     cost_usd: 0,
+    attempt: 1,
     created_at: "2026-11-13T09:00:00Z",
     started_at: "2026-11-13T09:00:01Z",
     finished_at: "2026-11-13T09:00:04Z",

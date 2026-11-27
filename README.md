@@ -42,7 +42,9 @@ docker compose up -d --force-recreate api worker
 
 Phases 1 (foundation), 2 (accounts, organizations, roles, invitations), 3 (agents, engine, runs)
 and 4 (tools and approvals) are complete. Phase 5 (run reliability and quotas) is in progress: 5A (a live event log and
-streaming for runs) and 5B (organization limits, daily quotas, usage and provider limits) are built. See `CLAUDE.md` for conventions and commands,
+streaming for runs), 5B (organization limits, daily quotas, usage and provider limits) and 5C (crash
+recovery: a lost worker's runs are taken over and finished, no action is ever carried out twice)
+are built. See `CLAUDE.md` for conventions and commands,
 and `docs/` for the architecture, ER diagram and the design of each phase.
 
 ## Structure

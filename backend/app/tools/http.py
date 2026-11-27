@@ -77,6 +77,8 @@ _RESERVED_HEADERS = frozenset(
         "accept-encoding",
         "user-agent",
         "forwarded",
+        # Set by the platform on writes (see _call): the agent cannot choose or reuse it.
+        "idempotency-key",
         "x-forwarded-for",
         "x-forwarded-host",
         "x-forwarded-proto",
@@ -449,6 +451,12 @@ async def _call(arguments: dict[str, Any], context: ToolContext, *, method: str)
     headers = build_agent_headers(
         arguments.get("headers"), reserved=frozenset({config.auth_header.lower()})
     )
+
+    # A write carries a key that names this one call and stays the same if the call is ever carried
+    # out again after a crash. Servers that support the (standard) Idempotency-Key header use it to
+    # recognise the repeat; the platform itself never repeats a started write.
+    if method in WRITE_METHODS and context.idempotency_key:
+        headers.append(("Idempotency-Key", context.idempotency_key))
 
     body: bytes | None = None
     content_type: str | None = None

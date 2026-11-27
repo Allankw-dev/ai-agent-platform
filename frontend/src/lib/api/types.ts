@@ -148,7 +148,8 @@ export type RunEventType =
   | "run.awaiting_approval"
   | "run.resumed"
   | "run.finished"
-  | "run.cancelled";
+  | "run.cancelled"
+  | "run.recovered";
 /** One thing that happened to a run. `data` holds ids and statuses only, never step content. */
 export type RunEvent = {
   seq: number;
@@ -174,6 +175,8 @@ export type RunRead = {
   output_tokens: number;
   /** An estimate. 0 means "not estimated" when tokens were used (no prices configured). */
   cost_usd: number;
+  /** 1 normally; 2 or more when the run was taken over after its worker was lost. */
+  attempt: number;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;

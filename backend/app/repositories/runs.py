@@ -73,12 +73,25 @@ async def list_steps(session: AsyncSession, run_id: uuid.UUID) -> list[RunStep]:
     return list(rows)
 
 
+def _held_by(attempt: int | None) -> list[Any]:
+    """The extra condition that makes a write conditional on one worker's attempt (fencing)."""
+    return [] if attempt is None else [AgentRun.attempt == attempt]
+
+
+async def is_held_by(session: AsyncSession, run_id: uuid.UUID, attempt: int) -> bool:
+    """Whether this attempt is still the one that holds the run (nobody has taken it over)."""
+    held = await session.scalar(
+        select(AgentRun.id).where(AgentRun.id == run_id, AgentRun.attempt == attempt)
+    )
+    return held is not None
+
+
 async def claim(session: AsyncSession, run_id: uuid.UUID) -> bool:
     """Atomically move a queued run to running. False if it was not queued."""
     result = await session.execute(
         update(AgentRun)
         .where(AgentRun.id == run_id, AgentRun.status == RunStatus.QUEUED)
-        .values(status=RunStatus.RUNNING, started_at=datetime.now(UTC))
+        .values(status=RunStatus.RUNNING, started_at=datetime.now(UTC), heartbeat_at=func.now())
         .returning(AgentRun.id)
     )
     if result.first() is None:
@@ -124,10 +137,18 @@ async def claim_for_resume(
     ):
         return None
     checkpoint = dict(run.checkpoint)
+    # The checkpoint is kept, now as progress noting which approval this resume answers, so a worker
+    # that dies right after claiming the run can be replaced and resume from the same decision.
+    progress = {**checkpoint, "kind": "progress", "resume": {"awaiting": awaiting}}
     await session.execute(
         update(AgentRun)
         .where(AgentRun.id == run_id)
-        .values(status=RunStatus.RUNNING, checkpoint=None, last_resumed_at=datetime.now(UTC))
+        .values(
+            status=RunStatus.RUNNING,
+            checkpoint=progress,
+            last_resumed_at=datetime.now(UTC),
+            heartbeat_at=func.now(),
+        )
     )
     await run_events.emit(
         session, run_id, RunEventType.RESUMED, {"decision": approval.status.value}
@@ -135,11 +156,18 @@ async def claim_for_resume(
     return ResumeClaim(checkpoint=checkpoint, approval=approval)
 
 
-async def pause(session: AsyncSession, run_id: uuid.UUID, checkpoint: dict[str, Any]) -> bool:
-    """Park a running run until a person decides. False if it is no longer running (cancelled)."""
+async def pause(
+    session: AsyncSession,
+    run_id: uuid.UUID,
+    checkpoint: dict[str, Any],
+    *,
+    attempt: int | None = None,
+) -> bool:
+    """Park a running run until a person decides. False if it is no longer running (cancelled),
+    or, when `attempt` is given, no longer held by that attempt (another worker took it over)."""
     result = await session.execute(
         update(AgentRun)
-        .where(AgentRun.id == run_id, AgentRun.status == RunStatus.RUNNING)
+        .where(AgentRun.id == run_id, AgentRun.status == RunStatus.RUNNING, *_held_by(attempt))
         .values(status=RunStatus.AWAITING_APPROVAL, checkpoint=checkpoint)
         .returning(AgentRun.id)
     )
@@ -180,12 +208,20 @@ async def finish(
     *,
     output: dict[str, object] | None = None,
     error: str | None = None,
+    attempt: int | None = None,
 ) -> bool:
-    """Close a run that is still running. A run cancelled meanwhile stays cancelled."""
+    """Close a run that is still running. A run cancelled meanwhile stays cancelled, and when
+    `attempt` is given a run that another worker took over is left to that worker."""
     result = await session.execute(
         update(AgentRun)
-        .where(AgentRun.id == run_id, AgentRun.status == RunStatus.RUNNING)
-        .values(status=status, output=output, error=error, finished_at=datetime.now(UTC))
+        .where(AgentRun.id == run_id, AgentRun.status == RunStatus.RUNNING, *_held_by(attempt))
+        .values(
+            status=status,
+            output=output,
+            error=error,
+            finished_at=datetime.now(UTC),
+            checkpoint=None,
+        )
         .returning(AgentRun.id)
     )
     if result.first() is None:

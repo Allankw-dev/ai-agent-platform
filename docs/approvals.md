@@ -81,8 +81,8 @@ queue_unavailable` (see "If something fails").
 | The action runs twice | Only one resume can claim the run (a row lock and a state change). Repeats do nothing. A step is marked started *before* its action runs, and a dead worker's run is never retried. |
 | What runs differs from what was shown | The action runs from the approval's stored arguments, re-checked: if checking would change them (for example after a deploy), it is refused. |
 | The model sneaks in a different action | After the pause the model is not asked again before the approved action runs. |
-| A worker dies mid-action | The run fails saying plainly that it is **unknown whether the action happened**, and it is not retried. |
-| A run waits for days | The orphan check measures from the last resume, so a long wait is not mistaken for a dead worker. |
+| A worker dies mid-action | The run fails saying plainly that it is **unknown whether the action happened**, and it is not retried. A worker that dies *before* the action began is replaced and the action runs once; one that dies *after* it finished is replaced and the recorded result is used, not a second run (see `docs/engine.md`, "Crash recovery"). |
+| A run waits for days | A run waiting for a person has no worker and no heartbeat to lose; only a running run can be mistaken for a dead one. |
 | Nobody ever decides | Expiry stops the run. Expiry is applied whenever runs or approvals are read or decided. |
 | A secret in an approval | Approvals hold only the arguments the agent chose. Credentials are added by the platform when the action runs, never stored with the approval, and the audit log records who and when, not the arguments or the note. |
 
@@ -91,9 +91,10 @@ queue_unavailable` (see "If something fails").
 - **Deciding returns 503 `queue_unavailable`:** the decision is saved but the run was not handed to
   a worker (the queue was down). Press approve or reject again: the same decision on a run that
   still waits hands it over again, and is harmless if it was already picked up.
-- **A worker restarted during a resume:** the redelivered task does nothing. After the usual
-  grace period the run is closed as interrupted (or "unknown whether the action happened" if the
-  action had started). Start a new run if you want to try again.
+- **A worker restarted during a resume:** the redelivered task does nothing while the worker is
+  alive. If it died, the scheduler takes the run over within about a minute and carries on from the
+  same decision; the approved action is run once, never twice. If the action had *started*, the run
+  ends with "unknown whether the action happened". Start a new run if you want to try again.
 - **The saved state cannot be read** (it came from an incompatible version): the run fails with a
   clear message instead of guessing.
 

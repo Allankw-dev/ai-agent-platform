@@ -74,6 +74,10 @@ class ToolContext:
     integrations: IntegrationAccess | None = None
     # The settings of this agent's grant of the tool (for provider tools: {"integration_id": ...}).
     tool_config: Mapping[str, Any] = field(default_factory=dict)
+    # Names this one tool call, and stays the same if the call is carried out again after a crash
+    # (it is derived from the run and the call, not from the attempt). Tools that change something
+    # elsewhere should hand it to the service they call, so that service can recognise a repeat.
+    idempotency_key: str | None = None
 
 
 ToolHandler = Callable[[dict[str, Any], ToolContext], Awaitable[dict[str, Any]]]

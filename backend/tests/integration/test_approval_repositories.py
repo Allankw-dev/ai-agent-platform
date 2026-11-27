@@ -135,7 +135,15 @@ async def test_a_decided_run_can_be_claimed_once_and_only_once(
     assert first is not None
     assert first.approval.status is ApprovalStatus.APPROVED
     assert first.checkpoint["awaiting"]["approval_id"] == approval_id
-    assert state_of(workspace, run_id) == ("running", False)  # taken, and the state is cleared
+    assert state_of(workspace, run_id) == ("running", True)  # taken
+    # The saved state is kept, now as progress noting which approval it answers, so a worker lost
+    # right after claiming the run can be replaced and resume from the same decision.
+    saved = workspace.api.scalar("SELECT checkpoint FROM agent_runs WHERE id = :r", r=run_id)
+    assert saved["kind"] == "progress"
+    assert saved["resume"] == {"awaiting": first.checkpoint["awaiting"]}
+    assert workspace.api.scalar(
+        "SELECT heartbeat_at IS NOT NULL FROM agent_runs WHERE id = :r", r=run_id
+    )
     assert workspace.api.scalar(
         "SELECT last_resumed_at IS NOT NULL FROM agent_runs WHERE id = :r", r=run_id
     )

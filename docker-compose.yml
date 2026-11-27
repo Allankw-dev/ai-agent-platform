@@ -85,6 +85,27 @@ services:
       redis:
         condition: service_healthy
 
+  # Looks for runs whose worker died and re-queues them from their last saved progress. Exactly one
+  # of these should run (a second one is harmless, but pointless).
+  scheduler:
+    restart: unless-stopped
+    build: ./backend
+    command: celery -A app.workers.celery_app beat --loglevel=info --schedule /tmp/celerybeat-schedule
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://agent_app:agent_app@db:5432/agentplatform
+      MIGRATION_DATABASE_URL: postgresql+psycopg://app:app@db:5432/agentplatform
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend/app:/app/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   frontend:
     restart: unless-stopped
     build: ./frontend

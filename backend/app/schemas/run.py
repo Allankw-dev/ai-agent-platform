@@ -36,6 +36,8 @@ class RunRead(BaseModel):
     input_tokens: int
     output_tokens: int
     cost_usd: float  # an estimate, see app/engine/pricing.py
+    # 1 normally; 2 or more when the run was taken over after its worker was lost.
+    attempt: int
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None

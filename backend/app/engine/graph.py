@@ -26,10 +26,11 @@ continue, and may pause again.
 
 import asyncio
 import json
+import uuid
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 
 import structlog
 from langgraph.graph import END, START, StateGraph
@@ -46,8 +47,9 @@ from app.engine.llm import (
     user_message,
 )
 from app.engine.pricing import cost_micro_usd
-from app.engine.recorder import MAX_TEXT_CHARS, RunRecorder, scrub, strip_nul
+from app.engine.recorder import MAX_TEXT_CHARS, RunRecorder, RunSuperseded, scrub, strip_nul
 from app.models.enums import StepStatus, StepType
+from app.models.runs import RunStep
 from app.tools import get_handler, prepare_arguments
 from app.tools.base import ToolContext, ToolDefinition, ToolError, validate_arguments
 
@@ -165,16 +167,60 @@ def checkpoint_from_state(state: EngineState) -> dict[str, Any]:
         "cost_micro_usd": state["cost_micro_usd"],
         "final_text": state.get("final_text", ""),
         "awaiting": state["awaiting"],
+        "kind": "pause",
     }
     cleaned: dict[str, Any] = strip_nul(checkpoint)
     return cleaned
+
+
+def progress_checkpoint(state: EngineState) -> dict[str, Any]:
+    """The loop's state as plain JSON, saved on the run *while it is running*.
+
+    If the worker dies, a replacement carries on from here. It is the same data as a pause
+    checkpoint, marked as progress, and it also notes which approval a run was just resumed from, so
+    a run that died right after being resumed can be resumed again from the same decision. Nothing
+    in it is shown to anyone; it is the loop's private memory.
+    """
+    saved = checkpoint_from_state(state)
+    saved["kind"] = "progress"
+    resume = state.get("resume")
+    if resume:
+        # Only which approval it was, never its arguments: those live in the approval row alone, so
+        # what a person approved is exactly what runs. The decision is read from there on recovery.
+        saved["resume"] = {"awaiting": strip_nul(resume["awaiting"])}
+    return saved
+
+
+def state_from_progress(checkpoint: dict[str, Any]) -> EngineState:
+    """Rebuild the loop's state from a progress checkpoint, to carry on after a lost worker."""
+    if checkpoint.get("version") != CHECKPOINT_VERSION or checkpoint.get("kind") != "progress":
+        raise ValueError("The saved state of this run has an unknown format.")
+    return {
+        "messages": checkpoint["messages"],
+        "pending_tool_calls": checkpoint["pending_tool_calls"],
+        "collected_results": checkpoint["collected_results"],
+        "iterations": checkpoint["iterations"],
+        "tool_calls": checkpoint.get("tool_calls", 0),
+        "input_tokens": checkpoint["input_tokens"],
+        "output_tokens": checkpoint["output_tokens"],
+        "cost_micro_usd": checkpoint["cost_micro_usd"],
+        "final_text": checkpoint.get("final_text", ""),
+        "outcome": "",
+        "error": "",
+        "awaiting": checkpoint.get("awaiting", {}),
+        "resume": checkpoint.get("resume"),
+    }
 
 
 def state_from_checkpoint(
     checkpoint: dict[str, Any], *, decision: str, note: str | None, arguments: dict[str, Any]
 ) -> EngineState:
     """Rebuild the loop's state to continue after a person's decision."""
-    if checkpoint.get("version") != CHECKPOINT_VERSION:
+    # Checkpoints saved before kinds existed are pause checkpoints.
+    if (
+        checkpoint.get("version") != CHECKPOINT_VERSION
+        or checkpoint.get("kind", "pause") != "pause"
+    ):
         raise ValueError("The saved state of this run has an unknown format.")
     return {
         "messages": checkpoint["messages"],
@@ -208,6 +254,24 @@ def _tool_result_text(result: dict[str, Any]) -> str:
     if len(text) > MAX_TEXT_CHARS:
         return text[:MAX_TEXT_CHARS] + "…[truncated]"
     return text
+
+
+def idempotency_key(run_id: uuid.UUID, call_key: str | None) -> str | None:
+    """A stable name for one tool call, handed to tools as `ToolContext.idempotency_key`.
+
+    It depends only on the run and the call, never on the attempt, so a call carried out again
+    after a crash presents the same key and the service it talks to can recognise the repeat.
+    """
+    if call_key is None:
+        return None
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"agent-platform/run/{run_id}/call/{call_key}"))
+
+
+def recorded_outcome(step: RunStep) -> ToolOutcome:
+    """What a tool call that already finished told the model, rebuilt from its recorded step."""
+    if step.status is StepStatus.SUCCEEDED:
+        return ToolOutcome(_tool_result_text(step.output or {}), False)
+    return ToolOutcome(step.error or "The tool call did not finish.", True)
 
 
 def build_graph(deps: EngineDeps) -> Any:
@@ -257,24 +321,6 @@ def build_graph(deps: EngineDeps) -> Any:
         cost = cost_micro_usd(
             config.prices, config.model, response.input_tokens, response.output_tokens
         )
-        await recorder.finish_step(
-            step_id,
-            StepStatus.SUCCEEDED,
-            output={
-                "text": response.text,
-                "tool_calls": [{"id": call.id, "name": call.name} for call in response.tool_calls],
-                "finish": response.finish.value,
-            },
-            input_tokens=response.input_tokens,
-            output_tokens=response.output_tokens,
-        )
-        await recorder.record_usage(
-            model=config.model,
-            input_tokens=response.input_tokens,
-            output_tokens=response.output_tokens,
-            cost_micro_usd=cost,
-        )
-
         update: dict[str, Any] = {
             "messages": [*state["messages"], assistant_message(response)],
             "iterations": state["iterations"] + 1,
@@ -290,13 +336,46 @@ def build_graph(deps: EngineDeps) -> Any:
         elif response.finish is FinishReason.REFUSED:
             update["outcome"] = Outcome.REFUSED.value
         elif response.tool_calls:
+            # Each call gets a key naming it within the run ("2.0": the first call of the second
+            # reply). It is saved with the call, so it survives a crash and a recovery.
             update["pending_tool_calls"] = [
-                {"id": c.id, "name": c.name, "args": c.args} for c in response.tool_calls
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "args": c.args,
+                    "key": f"{update['iterations']}.{index}",
+                }
+                for index, c in enumerate(response.tool_calls)
             ]
         elif not response.text.strip():
             update["outcome"] = Outcome.EMPTY.value
         else:
             update["outcome"] = Outcome.COMPLETED.value
+
+        await recorder.finish_step(
+            step_id,
+            StepStatus.SUCCEEDED,
+            output={
+                "text": response.text,
+                "tool_calls": [{"id": call.id, "name": call.name} for call in response.tool_calls],
+                "finish": response.finish.value,
+            },
+            input_tokens=response.input_tokens,
+            output_tokens=response.output_tokens,
+        )
+        # The model call's cost and the loop's new state are saved together, so a replacement
+        # worker never starts from a state that has forgotten what was already spent.
+        await recorder.record_usage(
+            model=config.model,
+            input_tokens=response.input_tokens,
+            output_tokens=response.output_tokens,
+            cost_micro_usd=cost,
+            checkpoint=(
+                None
+                if update.get("outcome")
+                else progress_checkpoint(cast(EngineState, {**state, **update}))
+            ),
+        )
         return update
 
     async def invoke(
@@ -304,11 +383,16 @@ def build_graph(deps: EngineDeps) -> Any:
         handler: Any,
         validated: dict[str, Any],
         step: Any,
+        call_key: str | None = None,
     ) -> ToolOutcome:
         """Run a validated tool call, record its result, and turn every failure into a message."""
         try:
             async with asyncio.timeout(tool.timeout_seconds):
-                context = replace(deps.context, tool_config=tool.config or {})
+                context = replace(
+                    deps.context,
+                    tool_config=tool.config or {},
+                    idempotency_key=idempotency_key(deps.context.run_id, call_key),
+                )
                 result = await handler(validated, context)
         except TimeoutError:
             message = f"The tool timed out after {tool.timeout_seconds} seconds."
@@ -345,19 +429,54 @@ def build_graph(deps: EngineDeps) -> Any:
             await recorder.finish_step(step, StepStatus.FAILED, error=message)
             return None, ToolOutcome(message, True)
 
-    async def run_one_tool(call: ToolCall, reasoning: str) -> ToolOutcome | Paused:
+    async def replay(call: ToolCall, existing: RunStep) -> ToolOutcome | Paused:
+        """A call that was started before (by this worker's predecessor): never run it twice.
+
+        A call that finished is answered from its recorded result. A call that was waiting for a
+        person is parked again on the same approval. A call that is still marked running cannot be
+        told apart from one another worker is running right now, so this worker steps aside.
+        """
+        if existing.status in (StepStatus.SUCCEEDED, StepStatus.FAILED, StepStatus.SKIPPED):
+            log.info(
+                "engine.call_replayed", call_key=existing.call_key, status=existing.status.value
+            )
+            return recorded_outcome(existing)
+        if existing.status is StepStatus.AWAITING_APPROVAL:
+            approval_id = await recorder.pending_approval_id(existing.id)
+            if approval_id is not None:
+                return Paused(
+                    {
+                        "approval_id": str(approval_id),
+                        "call_id": call.id,
+                        "name": call.name,
+                        "tool_key": existing.tool_key,
+                        "step_id": str(existing.id),
+                    }
+                )
+        raise RunSuperseded
+
+    async def run_one_tool(
+        call: ToolCall, reasoning: str, key: str | None = None
+    ) -> ToolOutcome | Paused:
         """Run one requested tool call, or pause it for a person's approval."""
         tool = by_llm_name.get(call.name)
         if tool is None:
-            step = await recorder.start_step(StepType.TOOL_CALL, tool_key=call.name[:100])
+            started = await recorder.start_tool_step(
+                key, name=call.name[:100], tool_key=call.name[:100]
+            )
+            if started.existing is not None:
+                return await replay(call, started.existing)
             message = f"The tool {call.name!r} is not available to this agent."
-            await recorder.finish_step(step, StepStatus.FAILED, error=message)
+            await recorder.finish_step(started.step_id, StepStatus.FAILED, error=message)
             return ToolOutcome(message, True)
 
         arguments = call.args if isinstance(call.args, dict) else {"value": call.args}
-        step = await recorder.start_step(
-            StepType.TOOL_CALL, name=tool.key, tool_key=tool.key, input=arguments
+        started = await recorder.start_tool_step(
+            key, name=tool.key, tool_key=tool.key, input=arguments
         )
+        if started.existing is not None:
+            return await replay(call, started.existing)
+        step = started.step_id
         handler = get_handler(tool.key)
         validated, failure = await check_arguments(tool, handler, call.args, step)
         if failure is not None or validated is None:
@@ -380,14 +499,19 @@ def build_graph(deps: EngineDeps) -> Any:
                     "step_id": str(step),
                 }
             )
-        return await invoke(tool, handler, validated, step)
+        return await invoke(tool, handler, validated, step, key)
 
     async def carry_out_decision(resume: dict[str, Any]) -> ToolOutcome | None:
         """Finish the call a person decided on. None means the run was cancelled meanwhile."""
-        import uuid
-
         awaiting = resume["awaiting"]
         step = uuid.UUID(awaiting["step_id"])
+        existing = await recorder.get_step(step)
+        if existing is not None:
+            if existing.status in (StepStatus.SUCCEEDED, StepStatus.FAILED, StepStatus.SKIPPED):
+                # Already carried out before a crash: report what happened, never do it again.
+                return recorded_outcome(existing)
+            if existing.status is StepStatus.RUNNING:
+                raise RunSuperseded  # another worker is carrying it out right now
         if resume["decision"] != "approved":
             note = (resume.get("note") or "").strip()
             message = f"{REJECTED_TEXT} Their note: {note}" if note else REJECTED_TEXT
@@ -417,7 +541,30 @@ def build_graph(deps: EngineDeps) -> Any:
             message = "This action was no longer waiting for a decision, so it was not run."
             await recorder.finish_step(step, StepStatus.FAILED, error=message)
             return ToolOutcome(message, True)
-        return await invoke(tool, handler, validated, step)
+        return await invoke(tool, handler, validated, step, existing.call_key if existing else None)
+
+    async def save(
+        state: EngineState,
+        results: list[dict[str, Any]],
+        remaining: list[dict[str, Any]],
+        used: int,
+    ) -> None:
+        """Remember how far this reply's tool calls have got, for a replacement worker."""
+        await recorder.save_progress(
+            progress_checkpoint(
+                cast(
+                    EngineState,
+                    {
+                        **state,
+                        "collected_results": results,
+                        "pending_tool_calls": remaining,
+                        "tool_calls": used,
+                        "awaiting": {},
+                        "resume": None,
+                    },
+                )
+            )
+        )
 
     async def run_tools(state: EngineState) -> dict[str, Any]:
         results = list(state.get("collected_results") or [])
@@ -437,6 +584,7 @@ def build_graph(deps: EngineDeps) -> Any:
                     "is_error": decided.is_error,
                 }
             )
+            await save(state, results, remaining, state.get("tool_calls", 0))
 
         used = state.get("tool_calls", 0)
         while remaining:
@@ -449,7 +597,7 @@ def build_graph(deps: EngineDeps) -> Any:
             raw = remaining.pop(0)
             used += 1
             call = ToolCall(id=raw["id"], name=raw["name"], args=raw["args"])
-            outcome = await run_one_tool(call, state.get("final_text", ""))
+            outcome = await run_one_tool(call, state.get("final_text", ""), raw.get("key"))
             if isinstance(outcome, Paused):
                 return {
                     "outcome": Outcome.AWAITING_APPROVAL.value,
@@ -467,6 +615,7 @@ def build_graph(deps: EngineDeps) -> Any:
                     "is_error": outcome.is_error,
                 }
             )
+            await save(state, results, remaining, used)
         return {
             "messages": [*state["messages"], tool_message(results)],
             "tool_calls": used,
@@ -477,7 +626,12 @@ def build_graph(deps: EngineDeps) -> Any:
         }
 
     def at_start(state: EngineState) -> str:
-        return "run_tools" if state.get("resume") else "call_model"
+        # A fresh run starts with the model. A resumed run, or one recovered part-way through a
+        # reply's tool calls (or just after the last of them), goes straight to the tools.
+        unfinished = (
+            state.get("resume") or state.get("pending_tool_calls") or state.get("collected_results")
+        )
+        return "run_tools" if unfinished else "call_model"
 
     def after_model(state: EngineState) -> str:
         if state.get("outcome"):

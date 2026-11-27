@@ -175,6 +175,67 @@ and then fails with "the provider is busy"; a slot is held through the Gemini cl
 If Redis cannot be reached the call goes ahead and a warning is logged: the limiter protects the
 provider's quota, it is not a security control.
 
+## Crash recovery and idempotency
+
+If a worker dies mid-run (the container is killed, the machine sleeps, a deploy replaces it), the
+run is **taken over and finished by another worker** instead of being lost. The rule behind
+everything below: **no action is ever carried out twice.**
+
+**Progress.** The loop saves its state on the run (`agent_runs.checkpoint`, `kind: "progress"`)
+before the first model call, together with the usage of every model call, and after every tool call.
+It is the same JSON as an approval checkpoint. A finished run keeps none.
+
+**Heartbeat and attempts.** The worker holding a run writes `heartbeat_at` every
+`RUN_HEARTBEAT_SECONDS` (15) and lists the run in a Redis set `runs:active`. `agent_runs.attempt`
+starts at 1. Every write the worker makes (steps, usage, progress, approvals, closing the run) is
+conditional on its own attempt number, so **a worker that was merely stalled stops at its next write
+once another has taken over** ("fencing"; it also stops at its next model call). The database is the
+authority; Redis only lets the scheduler *find* candidates, because Row Level Security stops any
+query from looking across organizations.
+
+**Taking over (`engine/recovery.py`).** The `scheduler` service (`celery beat`) runs
+`agents.recover_stale_runs` every `RUN_RECOVERY_INTERVAL_SECONDS` (30). For each run listed as
+active it asks the database, inside that organization and under a lock on the run row, whether the
+heartbeat is older than `RUN_STALE_SECONDS` (60). A stale run is:
+
+| State when the worker died | What recovery does |
+| --- | --- |
+| a model call in flight | The call is closed as interrupted and asked again from the saved state. |
+| a tool call in flight that needed no approval | Closed as interrupted and run again. Tools that need no approval must be **read-only** (see `CLAUDE.md`). |
+| a tool call that had **finished** | Never run again: the next worker answers from the step's recorded result. |
+| waiting for approval, but not yet parked | Parked again on the same approval. A person is asked once. |
+| an **approved action that had started** | Never retried. The run ends saying it is unknown whether it happened. |
+| nothing saved to continue from, or a format it cannot read | Ended with a plain message. |
+| already recovered `RUN_MAX_ATTEMPTS` (3) times | Ended, so a run that keeps killing its worker cannot loop forever. |
+
+A taken-over run is set back to `queued` with `attempt` + 1 and a `run.recovered` event (and an audit
+entry), and handed to a worker like any queued run. A task delivered twice for a running run runs
+the same decision, so two schedulers, a redelivery and a person reloading the page can never take
+the same run twice: only one gets the row lock first, and the others find it no longer running.
+Each attempt has the agent's full time limit; the usage of earlier attempts counts toward its token
+and cost limits.
+
+**Calls are idempotent.** Each tool call of each model reply has a key (`run_steps.call_key`, such
+as `2.0`: the first call of the second reply), saved with the call and **unique per run in the
+database**. Starting a call that already has a step returns that step instead, and the engine acts
+on its state: replay a recorded result, park on its pending approval, or stop (a call another
+worker has running). That makes "start this call at most once" true however many workers or
+deliveries reach it, not just in the happy path.
+
+**Idempotency keys for outside services.** A tool receives `ToolContext.idempotency_key`, derived
+from the run and the call (never the attempt), so it is the same on a repeat. `http.request` sends
+it as an `Idempotency-Key` header on POST, PUT, PATCH and DELETE (agents cannot set that header
+themselves). Services that honour it, such as most payment APIs, recognise a repeated call. The
+platform still does not repeat an approved action that had started: the key is a second line of
+defence, and the way a later phase can allow retrying where a service guarantees it.
+
+**Known limits.** A model call that was in flight when its worker died is paid for by the provider
+but not recorded, so a recovered run can cost up to one call more than shown. Recovery needs
+`celery beat` (the `scheduler` service) and Redis for *finding* runs quickly; without them runs are
+still ended, more slowly, by the backstop above. A Slack message or HTTP write that had started when
+its worker died can never be proven to have happened or not, which is why such a run ends with that
+statement instead of guessing.
+
 ## Run events and streaming
 
 Besides its steps, every run keeps an append-only **event log** (`run_events`, Phase 5A): a short
@@ -226,16 +287,15 @@ Reading it:
   the caller can retry (503 `queue_unavailable`).
 - `Idempotency-Key` header: the same key returns the original run (200) instead of starting
   another. A key belongs to one agent.
-- A task is acknowledged late and may be redelivered after a worker crash. A run found already
-  `running` on redelivery is marked failed ("interrupted"), never run twice. Finished runs are
-  skipped.
-- **Orphaned runs.** If a worker dies mid-run (Docker restarted, the machine slept), the run would
-  say "running" forever. Whenever runs are read (the list or a single run), any run that has been
-  "running" longer than the longest allowed run plus a 3 minute margin
-  (`AGENT_TIMEOUT_CEILING_SECONDS` + 180 s) is marked failed, and its unfinished steps with it. A
-  run still inside its time limit is never touched, and neither is a **queued** run: its task is
-  still in the queue and will run when a worker returns. The run page says so when a queued run has
-  waited over a minute.
+- A task is acknowledged late and may be delivered more than once. A finished run is skipped, and a
+  queued run is claimed by exactly one delivery. A run found `running` on redelivery is left alone
+  if its worker is alive, and taken over if its worker has died (see "Crash recovery" below).
+- **Backstop for runs nobody recovered.** Whenever runs are read (the list or a single run), any run
+  that has been "running" longer than the longest allowed run plus a 3 minute margin
+  (`AGENT_TIMEOUT_CEILING_SECONDS` + 180 s) is marked failed, and its unfinished steps with it. This
+  matters only when the scheduler is not running. A run still inside its time limit is never touched,
+  and neither is a **queued** run: its task is still in the queue and will run when a worker
+  returns. The run page says so when a queued run has waited over a minute.
 - **Restarts.** The compose services use `restart: unless-stopped`, so Docker brings the worker
   (and everything else) back after an engine restart. A stopped worker with queued tasks was the
   cause of a run stuck on "queued" during development.

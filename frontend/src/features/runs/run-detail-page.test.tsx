@@ -226,6 +226,23 @@ describe("RunDetailPage", () => {
     expect(calls).toBe(3);
   });
 
+  describe("recovery", () => {
+    it("says so when the run was taken over after its worker stopped", async () => {
+      routeApi({ [`GET ${RUN}`]: runDetail({ attempt: 2 }) });
+      renderRun();
+      const note = await screen.findByRole("note");
+      expect(note).toHaveTextContent("picked up again after the worker running it stopped");
+      expect(note).toHaveTextContent("attempt 2");
+    });
+
+    it("says nothing about it for an ordinary run", async () => {
+      routeApi({ [`GET ${RUN}`]: runDetail() });
+      renderRun();
+      await screen.findByRole("button", { name: "Run again" });
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    });
+  });
+
   describe("live updates", () => {
     const working = () =>
       runDetail({ status: "running", output: null, steps: [], finished_at: null });

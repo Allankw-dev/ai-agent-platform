@@ -130,6 +130,13 @@ export function RunDetailPage() {
           <p className="text-xs text-muted-foreground">
             Version {data.agent_version} · started {formatDateTime(data.created_at)}
           </p>
+          {data.attempt > 1 && (
+            <p role="note" className="text-xs text-warning">
+              This run was picked up again after the worker running it stopped (attempt{" "}
+              {data.attempt}). Steps that had finished were not repeated; a step cut short is marked
+              as interrupted and was run again.
+            </p>
+          )}
         </div>
         {mayRun && (
           <div className="flex flex-wrap items-center gap-2">

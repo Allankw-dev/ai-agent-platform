@@ -69,6 +69,12 @@ class AgentRun(UUIDPrimaryKeyMixin, TenantMixin, Base):
     # What this run set aside against the organization's daily quota when it was created (its
     # token budget, and its cost budget if it has one). It counts only while the run is open, so a
     # run that ends in any way releases it with no bookkeeping (see repositories/quotas.py).
+    # 1 for the first stretch of work, +1 for each recovery after a lost worker. Every write by a
+    # worker is conditional on its own attempt, so a worker that was merely stalled cannot go on
+    # writing once another has taken over.
+    attempt: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    # Written every few seconds by the worker that holds the run (see engine/liveness.py).
+    heartbeat_at: Mapped[datetime | None] = nullable_timestamp()
     reserved_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     reserved_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
 
@@ -82,6 +88,7 @@ class AgentRun(UUIDPrimaryKeyMixin, TenantMixin, Base):
             "reserved_tokens >= 0 AND (reserved_cost_usd IS NULL OR reserved_cost_usd >= 0)",
             name="reservation_non_negative",
         ),
+        CheckConstraint("attempt >= 1", name="attempt_positive"),
         Index("ix_agent_runs_org_id_created_at", "org_id", "created_at"),
         Index("ix_agent_runs_org_id_status", "org_id", "status"),
     )
@@ -106,9 +113,20 @@ class RunStep(UUIDPrimaryKeyMixin, TenantMixin, Base):
     output_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     started_at: Mapped[datetime] = now_column()
     finished_at: Mapped[datetime | None] = nullable_timestamp()
+    # Names one tool call of one model reply ("2.0": the first call of the second reply). Unique
+    # per run, so a call starts at most once however often a task is delivered, and a finished call
+    # is replayed from its recorded result instead of being run again. Null for model calls.
+    call_key: Mapped[str | None] = mapped_column(String(40))
 
     __table_args__ = (
         tenant_fk("run_id", "agent_runs", ondelete="CASCADE"),
+        Index(
+            "uq_run_steps_run_id_call_key",
+            "run_id",
+            "call_key",
+            unique=True,
+            postgresql_where=text("call_key IS NOT NULL"),
+        ),
         UniqueConstraint("id", "org_id", name="uq_run_steps_id_org_id"),
         UniqueConstraint("run_id", "sequence", name="uq_run_steps_run_id_sequence"),
         CheckConstraint("sequence >= 0", name="sequence_non_negative"),
