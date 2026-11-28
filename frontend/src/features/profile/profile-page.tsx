@@ -116,8 +116,8 @@ export function ProfilePage() {
           <Button
             variant="outline"
             onClick={async () => {
-              await signOut();
               router.replace("/");
+              await signOut();
             }}
           >
             Sign out

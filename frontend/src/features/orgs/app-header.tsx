@@ -37,8 +37,8 @@ export function AppHeader() {
             variant="outline"
             size="sm"
             onClick={async () => {
-              await signOut();
               router.replace("/");
+              await signOut();
             }}
           >
             Sign out
